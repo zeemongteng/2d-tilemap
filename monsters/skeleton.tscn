@@ -1,0 +1,20 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://actor.gd" id="1_actor"]
+[ext_resource type="Script" path="res://stats.gd" id="2_stats"]
+
+[sub_resource type="Resource" id="Resource_stats"]
+script = ExtResource("2_stats")
+max_hp = 9
+attack = 4
+defense = 1
+
+[node name="Skeleton" type="Node2D"]
+script = ExtResource("1_actor")
+display_name = "The skeleton"
+description = "Animated bones clad in rusted mail. Sturdy and relentless."
+glyph = "s"
+color = Color(0.86, 0.86, 0.8, 1)
+stats = SubResource("Resource_stats")
+loot_chance = 0.45
+

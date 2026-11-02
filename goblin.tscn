@@ -12,6 +12,7 @@ defense = 0
 [node name="Goblin" type="Node2D"]
 script = ExtResource("1_actor")
 display_name = "The goblin"
+description = "A scrappy cave scavenger that rushes into melee."
 glyph = "g"
 color = Color(0.753, 0.314, 0.302, 1)
 stats = SubResource("Resource_stats")

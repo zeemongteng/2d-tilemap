@@ -9,13 +9,16 @@ const SPELL_HOTKEYS: Array[Key] = [KEY_Q, KEY_W, KEY_E, KEY_F, KEY_G, KEY_C]
 
 @export var player_scene: PackedScene
 @export var monster_scene: PackedScene
+@export var monster_pool: Array[PackedScene]
+@export var spawner_scene: PackedScene
 @export var world_item_scene: PackedScene
 @export var item_pool: Array[Resource]
 @export var starting_items: Array[Resource]
 @export var starting_spells: Array[Resource]
 @export var spell_catalog: Array[Resource]
-@export var monster_count := 8
-@export var item_count := 8
+@export var monster_count := 6
+@export var spawner_count := 2
+@export var item_count := 7
 @export var monster_sight := 6
 
 @onready var grid: HexGrid = $HexGrid
@@ -25,6 +28,8 @@ var player: Actor
 var monsters: Array[Actor] = []
 var items: Array[WorldItem] = []
 var turn := 0
+var room_level := 1
+var _room_cleared := false
 var _kills := 0
 var _busy := false
 var _dead := false
@@ -35,7 +40,6 @@ var _rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
 	_rng.randomize()
-	grid.generate()
 
 	var typed_catalog: Array[SpellData] = []
 	for res in spell_catalog:
@@ -46,6 +50,7 @@ func _ready() -> void:
 	hud.item_selected.connect(_on_hud_item_selected)
 	hud.spell_learn_requested.connect(_on_spell_learn_requested)
 	hud.spell_upgrade_requested.connect(_on_spell_upgrade_requested)
+	hud.next_room_requested.connect(_advance_to_next_room)
 
 	player = _spawn_actor(player_scene, Vector2i.ZERO)
 	for res in starting_items:
@@ -55,30 +60,75 @@ func _ready() -> void:
 		if res is SpellData:
 			player.learn_spell(res as SpellData)
 
-	for i in monster_count:
-		var cell := grid.random_floor_cell(_rng, 5)
-		if not _is_occupied(cell):
-			monsters.append(_spawn_actor(monster_scene, cell))
-	for i in item_count:
-		var cell := grid.random_floor_cell(_rng, 3)
-		if not _is_occupied(cell) and _item_at(cell) == null:
-			_spawn_item(_random_item(), cell)
-
-	hud.post("Click hexes to move/attack. Click Spells (or Q/W/E/F) to aim & cast. [B] opens Grimoire.")
-	hud.refresh(player, turn, _active_spell_index)
+	_setup_room()
+	hud.post("Clear all monsters & Rift Gates (O)! Click Spells (Q/W/E) or Items (1-9). [B] Grimoire.")
+	_refresh_hud()
 
 
 func _process(_delta: float) -> void:
 	$Camera2D.position = player.position
 
 
-# --- spawning -------------------------------------------------------------
+# --- room generation & spawning -------------------------------------------
+
+func _setup_room() -> void:
+	_room_cleared = false
+	_active_spell_index = -1
+	for m in monsters:
+		if is_instance_valid(m):
+			m.queue_free()
+	monsters.clear()
+	for it in items:
+		if is_instance_valid(it):
+			it.queue_free()
+	items.clear()
+
+	grid.clear_spell_preview()
+	grid.generate()
+	player.place(grid, Vector2i.ZERO)
+
+	var total_spawners := spawner_count + (room_level - 1) / 2
+	for i in total_spawners:
+		var cell := grid.random_floor_cell(_rng, 6)
+		if not _is_occupied(cell):
+			var spawner := _spawn_actor(spawner_scene if spawner_scene != null else monster_scene, cell)
+			if spawner.spawn_scene == null:
+				spawner.spawn_scene = _random_monster_scene()
+			monsters.append(spawner)
+
+	var total_monsters := monster_count + (room_level - 1) * 2
+	for i in total_monsters:
+		var cell := grid.random_floor_cell(_rng, 5)
+		if not _is_occupied(cell):
+			monsters.append(_spawn_actor(_random_monster_scene(), cell))
+
+	for i in item_count:
+		var cell := grid.random_floor_cell(_rng, 3)
+		if not _is_occupied(cell) and _item_at(cell) == null:
+			_spawn_item(_random_item(), cell)
+
+
+func _advance_to_next_room() -> void:
+	if _busy or _dead or not _room_cleared:
+		return
+	room_level += 1
+	_setup_room()
+	hud.post("Entered Room %d! %d foes await." % [room_level, monsters.size()])
+	_refresh_hud()
+	_refresh_hover()
+
 
 func _spawn_actor(scene: PackedScene, cell: Vector2i) -> Actor:
 	var actor := scene.instantiate() as Actor
 	grid.add_child(actor)
 	actor.place(grid, cell)
 	return actor
+
+
+func _random_monster_scene() -> PackedScene:
+	if monster_pool.is_empty():
+		return monster_scene
+	return monster_pool[_rng.randi_range(0, monster_pool.size() - 1)]
 
 
 func _spawn_item(data: ItemData, cell: Vector2i) -> void:
@@ -95,6 +145,10 @@ func _random_item() -> ItemData:
 	if item_pool.is_empty():
 		return null
 	return item_pool[_rng.randi_range(0, item_pool.size() - 1)] as ItemData
+
+
+func _refresh_hud() -> void:
+	hud.refresh(player, turn, _active_spell_index, room_level, monsters.size(), _room_cleared)
 
 
 # --- lookups --------------------------------------------------------------
@@ -143,6 +197,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_B:
 			hud.toggle_spellbook()
+			return
+		if event.keycode == KEY_N and _room_cleared:
+			_advance_to_next_room()
 			return
 		if event.keycode == KEY_ESCAPE:
 			if hud.is_spellbook_open():
@@ -204,8 +261,9 @@ func _path_to(cell: Vector2i) -> Array[Vector2i]:
 
 func _refresh_hover() -> void:
 	var cell := grid.pixel_to_cell(grid.get_local_mouse_position())
+	var hovered_monster := _monster_at(cell)
 	var world_item := _item_at(cell)
-	hud.show_world_item_popup(world_item.data if world_item != null else null)
+	hud.show_world_hover_popup(hovered_monster, world_item.data if world_item != null else null)
 	if _busy:
 		grid.set_hover(cell, [])
 		grid.clear_spell_preview()
@@ -245,14 +303,14 @@ func _on_hud_spell_selected(index: int) -> void:
 			_cancel_spell_aim()
 		return
 	_active_spell_index = index
-	hud.refresh(player, turn, _active_spell_index)
+	_refresh_hud()
 	_refresh_hover()
 
 
 func _cancel_spell_aim() -> void:
 	_active_spell_index = -1
 	grid.clear_spell_preview()
-	hud.refresh(player, turn, _active_spell_index)
+	_refresh_hud()
 	_refresh_hover()
 
 
@@ -268,7 +326,7 @@ func _on_spell_learn_requested(template: SpellData) -> void:
 	player.spell_points -= template.learn_cost
 	var learned := player.learn_spell(template)
 	hud.post("You learn %s (%d charges)!" % [learned.display_name, learned.charges])
-	hud.refresh(player, turn, _active_spell_index)
+	_refresh_hud()
 
 
 func _on_spell_upgrade_requested(spell: SpellData) -> void:
@@ -277,7 +335,7 @@ func _on_spell_upgrade_requested(spell: SpellData) -> void:
 	player.spell_points -= spell.upgrade_cost
 	spell.upgrade()
 	hud.post("Upgraded %s to Lv.%d!" % [spell.display_name, spell.level])
-	hud.refresh(player, turn, _active_spell_index)
+	_refresh_hud()
 
 
 # --- spell targeting & casting --------------------------------------------
@@ -460,7 +518,7 @@ func _walk(path: Array[Vector2i]) -> void:
 		var picked_up := _pickup()
 		await _monsters_act()
 		turn += 1
-		hud.refresh(player, turn, _active_spell_index)
+		_refresh_hud()
 		if picked_up:
 			break
 	_finish_action()
@@ -475,7 +533,8 @@ func _advance_turn() -> void:
 func _finish_action() -> void:
 	_busy = false
 	_cancel_walk = false
-	hud.refresh(player, turn, _active_spell_index)
+	_check_room_cleared()
+	_refresh_hud()
 	_refresh_hover()
 
 
@@ -499,7 +558,7 @@ func _pickup() -> bool:
 	return true
 
 
-# --- combat ---------------------------------------------------------------
+# --- combat & room clear --------------------------------------------------
 
 func _attack(attacker: Actor, defender: Actor) -> void:
 	var damage := maxi(1, attacker.total_attack() - defender.total_defense() + _rng.randi_range(-1, 1))
@@ -531,17 +590,27 @@ func _handle_monster_death(defender: Actor) -> void:
 		return
 	monsters.erase(defender)
 	_kills += 1
-	var sp_msg := ""
-	if _kills % 2 == 0:
-		player.spell_points += 1
-		sp_msg = " (+1 SP)"
-	hud.post("%s dies.%s" % [defender.display_name, sp_msg])
+	var sp_gain := 1 if (defender.is_spawner or _kills % 2 == 0) else 0
+	player.spell_points += sp_gain
+	var sp_msg := " (+%d SP)" % sp_gain if sp_gain > 0 else ""
+	hud.post("%s is destroyed!%s" % [defender.display_name, sp_msg] if defender.is_spawner else "%s dies.%s" % [defender.display_name, sp_msg])
 	if _rng.randf() < defender.loot_chance and _item_at(defender.cell) == null:
 		_spawn_item(_random_item(), defender.cell)
 	defender.queue_free()
+	_check_room_cleared()
 
 
-# --- monster turns --------------------------------------------------------
+func _check_room_cleared() -> void:
+	if _room_cleared or _dead or not monsters.is_empty():
+		return
+	_room_cleared = true
+	player.spell_points += 2
+	player.restore_all_spells(1)
+	grid.play_spell_vfx(grid.cells_in_radius(player.cell, 2, true), Color(0.95, 0.85, 0.3))
+	hud.post("★ ROOM %d CLEARED! All monsters vanquished (+2 SP, +1 spell charge)! Press [N] or click Next Room." % room_level)
+
+
+# --- monster & spawner turns ----------------------------------------------
 
 func _monsters_act() -> void:
 	if _process_actor_statuses(player):
@@ -557,8 +626,19 @@ func _monsters_act() -> void:
 			m.frozen_turns -= 1
 			m.queue_redraw()
 			continue
-		if HexGrid.distance(m.cell, player.cell) == 1:
+		if m.regen_per_turn > 0 and m.burn_turns <= 0 and m.stats.hp < m.stats.max_hp:
+			m.heal(m.regen_per_turn)
+		if m.is_spawner:
+			_spawner_act(m)
+			continue
+		var dist := HexGrid.distance(m.cell, player.cell)
+		if dist == 1:
 			_attack(m, player)
+			if _dead:
+				break
+			continue
+		if m.attack_range > 1 and dist <= m.attack_range and grid.has_line_of_sight(m.cell, player.cell):
+			_ranged_monster_attack(m, player)
 			if _dead:
 				break
 			continue
@@ -569,6 +649,38 @@ func _monsters_act() -> void:
 		await tween.finished
 	else:
 		await get_tree().create_timer(STEP_TIME).timeout
+
+
+func _spawner_act(spawner: Actor) -> void:
+	spawner.spawn_cooldown -= 1
+	if spawner.spawn_cooldown > 0:
+		spawner.queue_redraw()
+		return
+	spawner.spawn_cooldown = spawner.spawn_interval
+	spawner.queue_redraw()
+	var options: Array[Vector2i] = []
+	for n in grid.walkable_neighbors(spawner.cell):
+		if not _is_occupied(n):
+			options.append(n)
+	if options.is_empty():
+		return
+	var spawn_cell := options[_rng.randi_range(0, options.size() - 1)]
+	var scene := spawner.spawn_scene if spawner.spawn_scene != null else _random_monster_scene()
+	var summoned := _spawn_actor(scene, spawn_cell)
+	monsters.append(summoned)
+	grid.play_spell_vfx([spawner.cell, spawn_cell], spawner.color)
+	hud.post("%s summons %s!" % [spawner.display_name, summoned.display_name.to_lower()])
+
+
+func _ranged_monster_attack(attacker: Actor, defender: Actor) -> void:
+	var arc: Array[Vector2] = [grid.cell_to_pixel(attacker.cell), grid.cell_to_pixel(defender.cell)]
+	grid.play_spell_vfx([defender.cell], attacker.color, arc)
+	var damage := maxi(1, attacker.total_attack() - defender.total_defense() + _rng.randi_range(-1, 1))
+	defender.take_damage(damage, attacker.color)
+	hud.post("%s blasts %s from afar for %d." % [attacker.display_name, defender.display_name.to_lower(), damage])
+	if defender.is_dead() and defender == player:
+		_dead = true
+		hud.post("You die. Press R to start over.")
 
 
 func _process_actor_statuses(actor: Actor) -> bool:

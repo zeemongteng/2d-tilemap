@@ -1,41 +1,48 @@
-[gd_scene format=3 uid="uid://cctmtfqsg2wdm"]
+[gd_scene format=3]
 
-[ext_resource type="Script" uid="uid://dgyn6ax64prcc" path="res://hud.gd" id="1_hud"]
+[ext_resource type="Script" path="res://hud.gd" id="1_hud"]
 
-[node name="Hud" type="CanvasLayer" unique_id=1384715258]
+[node name="Hud" type="CanvasLayer"]
 script = ExtResource("1_hud")
 
-[node name="Stats" type="Label" parent="." unique_id=1438736096]
+[node name="Stats" type="Label" parent="."]
 offset_left = 12.0
 offset_top = 8.0
 offset_right = 360.0
-offset_bottom = 148.0
+offset_bottom = 168.0
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 4
 
-[node name="SpellPanel" type="VBoxContainer" parent="." unique_id=430418485]
+[node name="SpellPanel" type="VBoxContainer" parent="."]
 offset_left = 12.0
-offset_top = 156.0
+offset_top = 176.0
 offset_right = 330.0
-offset_bottom = 520.0
+offset_bottom = 550.0
 theme_override_constants/separation = 6
 
-[node name="SpellsHeader" type="Label" parent="SpellPanel" unique_id=1615123442]
+[node name="NextRoomButton" type="Button" parent="SpellPanel"]
+visible = false
 layout_mode = 2
+focus_mode = 0
+theme_override_colors/font_color = Color(0.45, 1, 0.55, 1)
+text = "★ ROOM CLEARED — [N] Enter Next Room ★"
+
+[node name="SpellsHeader" type="Label" parent="SpellPanel"]
+layout_mode = 2
+text = "Spells (click or press key)"
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 4
-text = "Spells (click or press key)"
 
-[node name="SpellList" type="VBoxContainer" parent="SpellPanel" unique_id=1294270251]
+[node name="SpellList" type="VBoxContainer" parent="SpellPanel"]
 layout_mode = 2
 theme_override_constants/separation = 4
 
-[node name="SpellbookButton" type="Button" parent="SpellPanel" unique_id=1613825803]
+[node name="SpellbookButton" type="Button" parent="SpellPanel"]
 layout_mode = 2
 focus_mode = 0
 text = "[B] Open Spellbook (2 SP)"
 
-[node name="TargetingBanner" type="Label" parent="SpellPanel" unique_id=1251315827]
+[node name="TargetingBanner" type="Label" parent="SpellPanel"]
 visible = false
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 0.85, 0.35, 1)
@@ -43,7 +50,7 @@ theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 4
 autowrap_mode = 2
 
-[node name="InventoryPanel" type="VBoxContainer" parent="." unique_id=264942063]
+[node name="InventoryPanel" type="VBoxContainer" parent="."]
 anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
@@ -54,17 +61,17 @@ offset_bottom = 420.0
 grow_horizontal = 0
 theme_override_constants/separation = 4
 
-[node name="InventoryHeader" type="Label" parent="InventoryPanel" unique_id=1319340492]
+[node name="InventoryHeader" type="Label" parent="InventoryPanel"]
 layout_mode = 2
+text = "Inventory (click or press 1-9)"
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 4
-text = "Inventory (click or press 1-9)"
 
-[node name="InventoryList" type="VBoxContainer" parent="InventoryPanel" unique_id=2002772353]
+[node name="InventoryList" type="VBoxContainer" parent="InventoryPanel"]
 layout_mode = 2
 theme_override_constants/separation = 4
 
-[node name="Log" type="Label" parent="." unique_id=1226475694]
+[node name="Log" type="Label" parent="."]
 anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
@@ -76,7 +83,7 @@ grow_vertical = 0
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 4
 
-[node name="SpellbookModal" type="PanelContainer" parent="." unique_id=1091118439]
+[node name="SpellbookModal" type="PanelContainer" parent="."]
 visible = false
 anchors_preset = 8
 anchor_left = 0.5
@@ -90,47 +97,47 @@ offset_bottom = 240.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="Margin" type="MarginContainer" parent="SpellbookModal" unique_id=591998899]
+[node name="Margin" type="MarginContainer" parent="SpellbookModal"]
 layout_mode = 2
 theme_override_constants/margin_left = 16
 theme_override_constants/margin_top = 14
 theme_override_constants/margin_right = 16
 theme_override_constants/margin_bottom = 14
 
-[node name="VBox" type="VBoxContainer" parent="SpellbookModal/Margin" unique_id=1807317625]
+[node name="VBox" type="VBoxContainer" parent="SpellbookModal/Margin"]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="TopBar" type="HBoxContainer" parent="SpellbookModal/Margin/VBox" unique_id=1777158924]
+[node name="TopBar" type="HBoxContainer" parent="SpellbookModal/Margin/VBox"]
 layout_mode = 2
 
-[node name="Title" type="Label" parent="SpellbookModal/Margin/VBox/TopBar" unique_id=853959601]
+[node name="Title" type="Label" parent="SpellbookModal/Margin/VBox/TopBar"]
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_colors/font_color = Color(0.95, 0.85, 0.45, 1)
 text = "RIFT GRIMOIRE — Learn & Upgrade Spells"
+theme_override_colors/font_color = Color(0.95, 0.85, 0.45, 1)
 
-[node name="CloseButton" type="Button" parent="SpellbookModal/Margin/VBox/TopBar" unique_id=647293998]
+[node name="CloseButton" type="Button" parent="SpellbookModal/Margin/VBox/TopBar"]
 layout_mode = 2
 focus_mode = 0
 text = "Close [B / Esc]"
 
-[node name="Scroll" type="ScrollContainer" parent="SpellbookModal/Margin/VBox" unique_id=565384009]
+[node name="Scroll" type="ScrollContainer" parent="SpellbookModal/Margin/VBox"]
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="CatalogList" type="VBoxContainer" parent="SpellbookModal/Margin/VBox/Scroll" unique_id=516490591]
+[node name="CatalogList" type="VBoxContainer" parent="SpellbookModal/Margin/VBox/Scroll"]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 8
 
-[node name="InfoPopup" type="PanelContainer" parent="." unique_id=491450806]
+[node name="InfoPopup" type="PanelContainer" parent="."]
 visible = false
 offset_right = 270.0
 offset_bottom = 86.0
 mouse_filter = 2
 
-[node name="Margin" type="MarginContainer" parent="InfoPopup" unique_id=200370156]
+[node name="Margin" type="MarginContainer" parent="InfoPopup"]
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/margin_left = 12
@@ -138,24 +145,27 @@ theme_override_constants/margin_top = 10
 theme_override_constants/margin_right = 12
 theme_override_constants/margin_bottom = 10
 
-[node name="VBox" type="VBoxContainer" parent="InfoPopup/Margin" unique_id=1042296871]
+[node name="VBox" type="VBoxContainer" parent="InfoPopup/Margin"]
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 4
 
-[node name="PopupTitle" type="Label" parent="InfoPopup/Margin/VBox" unique_id=398249846]
+[node name="PopupTitle" type="Label" parent="InfoPopup/Margin/VBox"]
 layout_mode = 2
+mouse_filter = 2
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 3
 
-[node name="PopupSubtitle" type="Label" parent="InfoPopup/Margin/VBox" unique_id=276789802]
+[node name="PopupSubtitle" type="Label" parent="InfoPopup/Margin/VBox"]
 layout_mode = 2
+mouse_filter = 2
 theme_override_colors/font_color = Color(0.85, 0.85, 0.55, 1)
 theme_override_font_sizes/font_size = 13
 
-[node name="PopupBody" type="Label" parent="InfoPopup/Margin/VBox" unique_id=1253520313]
+[node name="PopupBody" type="Label" parent="InfoPopup/Margin/VBox"]
 custom_minimum_size = Vector2(240, 0)
 layout_mode = 2
+mouse_filter = 2
 theme_override_colors/font_color = Color(0.9, 0.9, 0.9, 1)
 theme_override_font_sizes/font_size = 14
 autowrap_mode = 3

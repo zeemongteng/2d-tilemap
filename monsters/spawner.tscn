@@ -1,0 +1,22 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://actor.gd" id="1_actor"]
+[ext_resource type="Script" path="res://stats.gd" id="2_stats"]
+
+[sub_resource type="Resource" id="Resource_stats"]
+script = ExtResource("2_stats")
+max_hp = 12
+attack = 0
+defense = 1
+
+[node name="Spawner" type="Node2D"]
+script = ExtResource("1_actor")
+display_name = "The rift gate"
+description = "Unstable planar tear that summons monsters every 4 turns. Destroy it to stop reinforcements!"
+glyph = "O"
+color = Color(0.78, 0.35, 0.95, 1)
+stats = SubResource("Resource_stats")
+loot_chance = 0.8
+is_spawner = true
+spawn_interval = 4
+

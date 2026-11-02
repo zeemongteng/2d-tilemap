@@ -1,14 +1,22 @@
 class_name Actor
 extends Node2D
-## Anything that occupies one hex and takes a turn: the player, monsters.
+## Anything that occupies one hex and takes a turn: the player, monsters, spawners.
 
 @export var display_name := "Actor"
+@export_multiline var description := ""
 @export var glyph := "@"
 @export var color := Color.WHITE
 @export var font_size := 28
 @export var stats: Stats
 ## Chance (0-1) of dropping a random item on death.
 @export var loot_chance := 0.0
+
+@export_group("Monster Abilities")
+@export var attack_range := 1
+@export var regen_per_turn := 0
+@export var is_spawner := false
+@export var spawn_interval := 4
+@export var spawn_scene: PackedScene
 
 var cell := Vector2i.ZERO
 var grid: HexGrid
@@ -21,6 +29,7 @@ var armor: ItemData
 var burn_turns := 0
 var burn_damage := 2
 var frozen_turns := 0
+var spawn_cooldown := 3
 
 
 func _ready() -> void:
@@ -30,6 +39,7 @@ func _ready() -> void:
 	else:
 		stats = stats.duplicate() as Stats
 	stats.hp = stats.max_hp
+	spawn_cooldown = maxi(1, spawn_interval - 1)
 
 
 func place(target_grid: HexGrid, target_cell: Vector2i) -> void:
@@ -127,6 +137,9 @@ func _draw() -> void:
 	elif burn_turns > 0:
 		draw_col = color.lerp(Color(1.0, 0.45, 0.1), 0.55)
 
+	if is_spawner:
+		draw_arc(Vector2.ZERO, font_size * 0.58, 0.0, TAU, 24, Color(draw_col.r, draw_col.g, draw_col.b, 0.45), 2.0)
+
 	var offset := Vector2(-font_size, font_size * 0.35)
 	draw_string(font, offset, glyph, HORIZONTAL_ALIGNMENT_CENTER, font_size * 2.0, font_size, draw_col)
 
@@ -134,6 +147,9 @@ func _draw() -> void:
 		var badge := "*%d" % frozen_turns if frozen_turns > 0 else "~%d" % burn_turns
 		var badge_col := Color(0.4, 0.9, 1.0) if frozen_turns > 0 else Color(1.0, 0.5, 0.15)
 		draw_string(font, Vector2(-font_size, -font_size * 0.38), badge, HORIZONTAL_ALIGNMENT_CENTER, font_size * 2.0, 12, badge_col)
+	elif is_spawner:
+		var timer_txt := "⏳%d" % spawn_cooldown if spawn_cooldown > 1 else "!"
+		draw_string(font, Vector2(-font_size, -font_size * 0.38), timer_txt, HORIZONTAL_ALIGNMENT_CENTER, font_size * 2.0, 12, Color(0.95, 0.65, 1.0))
 
 	if stats != null and stats.hp < stats.max_hp and stats.hp > 0:
 		var bar_w := 24.0

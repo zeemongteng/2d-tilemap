@@ -5,11 +5,13 @@ signal spell_selected(index: int)
 signal item_selected(index: int)
 signal spell_learn_requested(template: SpellData)
 signal spell_upgrade_requested(spell: SpellData)
+signal next_room_requested()
 
 const MAX_LOG_LINES := 6
 const SPELL_KEYS: Array[String] = ["Q", "W", "E", "F", "G", "C"]
 
 @onready var stats_label: Label = $Stats
+@onready var next_room_button: Button = $SpellPanel/NextRoomButton
 @onready var spell_list: VBoxContainer = $SpellPanel/SpellList
 @onready var spellbook_button: Button = $SpellPanel/SpellbookButton
 @onready var targeting_banner: Label = $SpellPanel/TargetingBanner
@@ -36,6 +38,9 @@ var _ui_hover_active := false
 func _ready() -> void:
 	spellbook_button.pressed.connect(toggle_spellbook)
 	close_button.pressed.connect(close_spellbook)
+	next_room_button.pressed.connect(func() -> void:
+		next_room_requested.emit()
+	)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.08, 0.11, 0.1, 0.96)
 	style.border_color = Color(0.45, 0.62, 0.52, 0.9)
@@ -99,14 +104,36 @@ func show_spell_popup(spell: SpellData, from_ui := true) -> void:
 	_update_popup_position()
 
 
-func show_world_item_popup(item: ItemData) -> void:
+func show_actor_popup(actor: Actor) -> void:
+	if actor == null:
+		return
+	_ui_hover_active = false
+	popup_title.text = "%s %s" % [actor.glyph, actor.display_name.capitalize()]
+	popup_title.modulate = actor.color.lerp(Color.WHITE, 0.35)
+	if actor.is_spawner:
+		popup_subtitle.text = "HP %d/%d  •  DEF %d  •  Spawns in %d turn(s)" % [
+			actor.stats.hp, actor.stats.max_hp, actor.total_defense(), actor.spawn_cooldown
+		]
+	else:
+		var rng_str := "  •  Rng %d" % actor.attack_range if actor.attack_range > 1 else ""
+		popup_subtitle.text = "HP %d/%d  •  ATK %d  •  DEF %d%s" % [
+			actor.stats.hp, actor.stats.max_hp, actor.total_attack(), actor.total_defense(), rng_str
+		]
+	popup_body.text = actor.description if not actor.description.is_empty() else "Hostile creature."
+	info_popup.reset_size()
+	info_popup.visible = true
+	_update_popup_position()
+
+
+func show_world_hover_popup(actor: Actor, item: ItemData) -> void:
 	if _ui_hover_active:
 		return
-	if item == null:
-		if not _ui_hover_active:
-			info_popup.visible = false
-		return
-	show_item_popup(item, false)
+	if actor != null:
+		show_actor_popup(actor)
+	elif item != null:
+		show_item_popup(item, false)
+	else:
+		info_popup.visible = false
 
 
 func hide_popup() -> void:
@@ -135,7 +162,7 @@ func post(message: String) -> void:
 	log_label.text = "\n".join(_lines)
 
 
-func refresh(player: Actor, turn: int, active_spell_idx := -1) -> void:
+func refresh(player: Actor, turn: int, active_spell_idx := -1, room := 1, remaining_foes := 0, room_cleared := false) -> void:
 	_last_player = player
 	_last_turn = turn
 	_active_spell_index = active_spell_idx
@@ -151,12 +178,16 @@ func refresh(player: Actor, turn: int, active_spell_idx := -1) -> void:
 		status_parts.append("BURNING (%dt)" % player.burn_turns)
 	var status_line := "\nStatus: " + ", ".join(status_parts) if not status_parts.is_empty() else ""
 
-	stats_label.text = "Turn %d   |   SP: %d\nHP %d/%d   ATK %d   DEF %d\nWeapon: %s\nArmor: %s%s" % [
-		turn, player.spell_points,
+	var room_status := "★ CLEARED ★" if room_cleared else "Foes: %d" % remaining_foes
+	stats_label.text = "Room %d (%s)  |  Turn %d  |  SP: %d\nHP %d/%d   ATK %d   DEF %d\nWeapon: %s\nArmor: %s%s" % [
+		room, room_status, turn, player.spell_points,
 		player.stats.hp, player.stats.max_hp,
 		player.total_attack(), player.total_defense(),
 		weapon, armor, status_line,
 	]
+
+	next_room_button.visible = room_cleared
+	next_room_button.text = "★ ROOM CLEARED — [N] Enter Room %d ★" % (room + 1)
 
 	spellbook_button.text = "[B] Grimoire / Upgrade Spells (%d SP)" % player.spell_points
 	_rebuild_spells(player, active_spell_idx)
