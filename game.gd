@@ -40,6 +40,7 @@ var _rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
 	_rng.randomize()
+	grid.generate()
 
 	var typed_catalog: Array[SpellData] = []
 	for res in spell_catalog:
@@ -50,7 +51,7 @@ func _ready() -> void:
 	hud.item_selected.connect(_on_hud_item_selected)
 	hud.spell_learn_requested.connect(_on_spell_learn_requested)
 	hud.spell_upgrade_requested.connect(_on_spell_upgrade_requested)
-	hud.next_room_requested.connect(_advance_to_next_room)
+	hud.next_room_confirmed.connect(_on_next_room_confirmed)
 
 	player = _spawn_actor(player_scene, Vector2i.ZERO)
 	for res in starting_items:
@@ -60,8 +61,8 @@ func _ready() -> void:
 		if res is SpellData:
 			player.learn_spell(res as SpellData)
 
-	_setup_room()
-	hud.post("Clear all monsters & Rift Gates (O)! Click Spells (Q/W/E) or Items (1-9). [B] Grimoire.")
+	_populate_current_room(Vector2i.ZERO)
+	hud.post("Clear all foes, then walk to any green edge passage to enter the next room!")
 	_refresh_hud()
 
 
@@ -71,25 +72,15 @@ func _process(_delta: float) -> void:
 
 # --- room generation & spawning -------------------------------------------
 
-func _setup_room() -> void:
+func _populate_current_room(entry_cell: Vector2i) -> void:
 	_room_cleared = false
 	_active_spell_index = -1
-	for m in monsters:
-		if is_instance_valid(m):
-			m.queue_free()
-	monsters.clear()
-	for it in items:
-		if is_instance_valid(it):
-			it.queue_free()
-	items.clear()
-
+	grid.set_room_cleared(false)
 	grid.clear_spell_preview()
-	grid.generate()
-	player.place(grid, Vector2i.ZERO)
 
 	var total_spawners := spawner_count + (room_level - 1) / 2
 	for i in total_spawners:
-		var cell := grid.random_floor_cell(_rng, 6)
+		var cell := grid.random_floor_cell(_rng, 4, entry_cell, 5)
 		if not _is_occupied(cell):
 			var spawner := _spawn_actor(spawner_scene if spawner_scene != null else monster_scene, cell)
 			if spawner.spawn_scene == null:
@@ -98,24 +89,51 @@ func _setup_room() -> void:
 
 	var total_monsters := monster_count + (room_level - 1) * 2
 	for i in total_monsters:
-		var cell := grid.random_floor_cell(_rng, 5)
+		var cell := grid.random_floor_cell(_rng, 3, entry_cell, 4)
 		if not _is_occupied(cell):
 			monsters.append(_spawn_actor(_random_monster_scene(), cell))
 
 	for i in item_count:
-		var cell := grid.random_floor_cell(_rng, 3)
+		var cell := grid.random_floor_cell(_rng, 2, entry_cell, 2)
 		if not _is_occupied(cell) and _item_at(cell) == null:
 			_spawn_item(_random_item(), cell)
 
 
-func _advance_to_next_room() -> void:
+func _on_next_room_confirmed(edge_cell: Vector2i) -> void:
 	if _busy or _dead or not _room_cleared:
 		return
+	_busy = true
 	room_level += 1
-	_setup_room()
+	var next_center := grid.get_adjacent_room_center(grid.current_room_center, edge_cell)
+	grid.generate_room(next_center, edge_cell)
+
+	# Step 1 hex inward toward the new room center if walkable so the player stands inside the new room.
+	var step_in := edge_cell
+	var best_dist := HexGrid.distance(edge_cell, next_center)
+	for n in grid.walkable_neighbors(edge_cell):
+		var d := HexGrid.distance(n, next_center)
+		if d < best_dist and not _is_occupied(n):
+			best_dist = d
+			step_in = n
+	if step_in != player.cell:
+		await player.move_to(step_in, STEP_TIME).finished
+		_pickup()
+
+	_populate_current_room(player.cell)
 	hud.post("Entered Room %d! %d foes await." % [room_level, monsters.size()])
+	_busy = false
 	_refresh_hud()
 	_refresh_hover()
+
+
+func _check_edge_trigger() -> bool:
+	if not grid.is_unvisited_edge_cell(player.cell):
+		return false
+	if not _room_cleared:
+		hud.post("The passage out of this room is sealed until all monsters are defeated!")
+		return false
+	hud.prompt_next_room(room_level + 1, player.cell)
+	return true
 
 
 func _spawn_actor(scene: PackedScene, cell: Vector2i) -> Actor:
@@ -194,12 +212,17 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _dead:
 		return
 
+	if hud.is_confirm_open():
+		if event is InputEventKey and event.pressed and not event.echo:
+			if event.keycode in [KEY_Y, KEY_ENTER, KEY_KP_ENTER]:
+				hud.confirm_next_room()
+			elif event.keycode in [KEY_N, KEY_ESCAPE]:
+				hud.close_confirm_modal()
+		return
+
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_B:
 			hud.toggle_spellbook()
-			return
-		if event.keycode == KEY_N and _room_cleared:
-			_advance_to_next_room()
 			return
 		if event.keycode == KEY_ESCAPE:
 			if hud.is_spellbook_open():
@@ -209,7 +232,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				_cancel_spell_aim()
 				return
 
-	if hud.is_spellbook_open():
+	if hud.is_any_modal_open():
 		return
 
 	if event is InputEventMouseMotion:
@@ -248,12 +271,13 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 ## Path to a cell; clicking a monster paths up to (not into) it.
+## While monsters are alive, pathfinding stays inside the current room.
 func _path_to(cell: Vector2i) -> Array[Vector2i]:
 	var target := _monster_at(cell)
 	var blocked := _monster_cells()
 	if target != null:
 		blocked.erase(cell)
-	var path := grid.find_path(player.cell, cell, blocked)
+	var path := grid.find_path(player.cell, cell, blocked, not _room_cleared)
 	if target != null and not path.is_empty():
 		path.pop_back()
 	return path
@@ -296,7 +320,6 @@ func _on_hud_spell_selected(index: int) -> void:
 		hud.post("%s has no charges left! Drink a Mana Potion to recharge." % spell.display_name)
 		return
 	if _active_spell_index == index:
-		# Pressing or clicking a self-targeted NOVA spell a second time casts it immediately.
 		if spell.pattern == SpellData.Pattern.NOVA:
 			_try_cast_active_spell(player.cell)
 		else:
@@ -348,6 +371,8 @@ func _valid_spell_targets(spell: SpellData) -> Array[Vector2i]:
 	var valid: Array[Vector2i] = []
 	for c in candidates:
 		if c == player.cell:
+			continue
+		if not _room_cleared and not grid.is_in_current_room(c):
 			continue
 		if spell.requires_los and not grid.has_line_of_sight(player.cell, c):
 			continue
@@ -438,7 +463,6 @@ func _cast_spell(spell: SpellData, target_cell: Vector2i) -> void:
 
 	for m in hit_monsters:
 		var dmg := spell.effective_damage()
-		# Fire melts frozen targets for +50% bonus damage!
 		if spell.element == SpellData.Element.FIRE and m.frozen_turns > 0:
 			dmg = int(ceil(float(dmg) * 1.5))
 		m.take_damage(dmg, spell.color)
@@ -460,6 +484,8 @@ func _cast_spell(spell: SpellData, target_cell: Vector2i) -> void:
 
 	await vfx_tween.finished
 	await _advance_turn()
+	if spell.pattern == SpellData.Pattern.BLINK:
+		_check_edge_trigger()
 
 
 # --- player turns ---------------------------------------------------------
@@ -519,7 +545,7 @@ func _walk(path: Array[Vector2i]) -> void:
 		await _monsters_act()
 		turn += 1
 		_refresh_hud()
-		if picked_up:
+		if _check_edge_trigger() or picked_up:
 			break
 	_finish_action()
 
@@ -604,10 +630,12 @@ func _check_room_cleared() -> void:
 	if _room_cleared or _dead or not monsters.is_empty():
 		return
 	_room_cleared = true
+	grid.set_room_cleared(true)
 	player.spell_points += 2
 	player.restore_all_spells(1)
-	grid.play_spell_vfx(grid.cells_in_radius(player.cell, 2, true), Color(0.95, 0.85, 0.3))
-	hud.post("★ ROOM %d CLEARED! All monsters vanquished (+2 SP, +1 spell charge)! Press [N] or click Next Room." % room_level)
+	grid.play_spell_vfx(grid.cells_in_radius(player.cell, 2, true), Color(0.35, 0.95, 0.55))
+	hud.post("★ ROOM %d CLEARED! (+2 SP, +1 spell charge). Walk to any glowing green edge passage to enter the next room!" % room_level)
+	_check_edge_trigger()
 
 
 # --- monster & spawner turns ----------------------------------------------
@@ -660,7 +688,7 @@ func _spawner_act(spawner: Actor) -> void:
 	spawner.queue_redraw()
 	var options: Array[Vector2i] = []
 	for n in grid.walkable_neighbors(spawner.cell):
-		if not _is_occupied(n):
+		if grid.is_in_current_room(n) and not _is_occupied(n):
 			options.append(n)
 	if options.is_empty():
 		return
@@ -705,7 +733,7 @@ func _monster_step(m: Actor) -> Vector2i:
 		for other in monsters:
 			if other != m:
 				others.append(other.cell)
-		var path := grid.find_path(m.cell, player.cell, others)
+		var path := grid.find_path(m.cell, player.cell, others, true)
 		if not path.is_empty():
 			return path[0]
 		return m.cell
@@ -713,7 +741,7 @@ func _monster_step(m: Actor) -> Vector2i:
 		return m.cell
 	var options: Array[Vector2i] = []
 	for n in grid.walkable_neighbors(m.cell):
-		if not _is_occupied(n):
+		if grid.is_in_current_room(n) and not _is_occupied(n):
 			options.append(n)
 	if options.is_empty():
 		return m.cell

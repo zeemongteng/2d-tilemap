@@ -5,13 +5,13 @@ signal spell_selected(index: int)
 signal item_selected(index: int)
 signal spell_learn_requested(template: SpellData)
 signal spell_upgrade_requested(spell: SpellData)
-signal next_room_requested()
+signal next_room_confirmed(edge_cell: Vector2i)
 
 const MAX_LOG_LINES := 6
 const SPELL_KEYS: Array[String] = ["Q", "W", "E", "F", "G", "C"]
 
 @onready var stats_label: Label = $Stats
-@onready var next_room_button: Button = $SpellPanel/NextRoomButton
+@onready var cleared_banner: Label = $SpellPanel/ClearedBanner
 @onready var spell_list: VBoxContainer = $SpellPanel/SpellList
 @onready var spellbook_button: Button = $SpellPanel/SpellbookButton
 @onready var targeting_banner: Label = $SpellPanel/TargetingBanner
@@ -21,6 +21,12 @@ const SPELL_KEYS: Array[String] = ["Q", "W", "E", "F", "G", "C"]
 @onready var spellbook_title: Label = $SpellbookModal/Margin/VBox/TopBar/Title
 @onready var close_button: Button = $SpellbookModal/Margin/VBox/TopBar/CloseButton
 @onready var catalog_list: VBoxContainer = $SpellbookModal/Margin/VBox/Scroll/CatalogList
+
+@onready var confirm_modal: PanelContainer = $ConfirmRoomModal
+@onready var confirm_title: Label = $ConfirmRoomModal/Margin/VBox/ConfirmTitle
+@onready var confirm_text: Label = $ConfirmRoomModal/Margin/VBox/ConfirmText
+@onready var yes_button: Button = $ConfirmRoomModal/Margin/VBox/Buttons/YesButton
+@onready var no_button: Button = $ConfirmRoomModal/Margin/VBox/Buttons/NoButton
 
 @onready var info_popup: PanelContainer = $InfoPopup
 @onready var popup_title: Label = $InfoPopup/Margin/VBox/PopupTitle
@@ -33,20 +39,22 @@ var _last_player: Actor
 var _last_turn := 0
 var _active_spell_index := -1
 var _ui_hover_active := false
+var _pending_edge_cell := Vector2i.ZERO
 
 
 func _ready() -> void:
 	spellbook_button.pressed.connect(toggle_spellbook)
 	close_button.pressed.connect(close_spellbook)
-	next_room_button.pressed.connect(func() -> void:
-		next_room_requested.emit()
-	)
+	yes_button.pressed.connect(confirm_next_room)
+	no_button.pressed.connect(close_confirm_modal)
+
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.08, 0.11, 0.1, 0.96)
 	style.border_color = Color(0.45, 0.62, 0.52, 0.9)
 	style.set_border_width_all(2)
 	style.set_corner_radius_all(6)
 	info_popup.add_theme_stylebox_override("panel", style)
+	confirm_modal.add_theme_stylebox_override("panel", style)
 
 
 func _process(_delta: float) -> void:
@@ -60,6 +68,34 @@ func set_spell_catalog(catalog: Array[SpellData]) -> void:
 
 func is_spellbook_open() -> bool:
 	return spellbook_modal.visible
+
+
+func is_confirm_open() -> bool:
+	return confirm_modal.visible
+
+
+func is_any_modal_open() -> bool:
+	return spellbook_modal.visible or confirm_modal.visible
+
+
+func prompt_next_room(next_room_num: int, edge_cell: Vector2i) -> void:
+	_pending_edge_cell = edge_cell
+	hide_popup()
+	confirm_title.text = "ENTER ROOM %d?" % next_room_num
+	confirm_text.text = "You have reached the edge of the room.\nGenerate and enter Room %d in this direction?" % next_room_num
+	yes_button.text = "[Y / Enter] Enter Room %d" % next_room_num
+	confirm_modal.visible = true
+
+
+func confirm_next_room() -> void:
+	if not confirm_modal.visible:
+		return
+	confirm_modal.visible = false
+	next_room_confirmed.emit(_pending_edge_cell)
+
+
+func close_confirm_modal() -> void:
+	confirm_modal.visible = false
 
 
 func toggle_spellbook() -> void:
@@ -186,8 +222,7 @@ func refresh(player: Actor, turn: int, active_spell_idx := -1, room := 1, remain
 		weapon, armor, status_line,
 	]
 
-	next_room_button.visible = room_cleared
-	next_room_button.text = "★ ROOM CLEARED — [N] Enter Room %d ★" % (room + 1)
+	cleared_banner.visible = room_cleared
 
 	spellbook_button.text = "[B] Grimoire / Upgrade Spells (%d SP)" % player.spell_points
 	_rebuild_spells(player, active_spell_idx)

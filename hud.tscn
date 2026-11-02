@@ -20,12 +20,15 @@ offset_right = 330.0
 offset_bottom = 550.0
 theme_override_constants/separation = 6
 
-[node name="NextRoomButton" type="Button" parent="SpellPanel"]
+[node name="ClearedBanner" type="Label" parent="SpellPanel"]
 visible = false
 layout_mode = 2
-focus_mode = 0
 theme_override_colors/font_color = Color(0.45, 1, 0.55, 1)
-text = "★ ROOM CLEARED — [N] Enter Next Room ★"
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 4
+text = "★ ROOM CLEARED ★
+Walk to any green edge passage to enter the next area!"
+autowrap_mode = 2
 
 [node name="SpellsHeader" type="Label" parent="SpellPanel"]
 layout_mode = 2
@@ -130,6 +133,61 @@ size_flags_vertical = 3
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 8
+
+[node name="ConfirmRoomModal" type="PanelContainer" parent="."]
+visible = false
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -210.0
+offset_top = -90.0
+offset_right = 210.0
+offset_bottom = 90.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Margin" type="MarginContainer" parent="ConfirmRoomModal"]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 16
+
+[node name="VBox" type="VBoxContainer" parent="ConfirmRoomModal/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="ConfirmTitle" type="Label" parent="ConfirmRoomModal/Margin/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.45, 1, 0.6, 1)
+text = "ENTER NEXT AREA?"
+horizontal_alignment = 1
+
+[node name="ConfirmText" type="Label" parent="ConfirmRoomModal/Margin/VBox"]
+layout_mode = 2
+text = "Venture through this passage into the adjacent cave room?"
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="Buttons" type="HBoxContainer" parent="ConfirmRoomModal/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 14
+alignment = 1
+
+[node name="YesButton" type="Button" parent="ConfirmRoomModal/Margin/VBox/Buttons"]
+custom_minimum_size = Vector2(165, 36)
+layout_mode = 2
+focus_mode = 0
+theme_override_colors/font_color = Color(0.5, 1, 0.6, 1)
+text = "[Y / Enter] Enter Next Room"
+
+[node name="NoButton" type="Button" parent="ConfirmRoomModal/Margin/VBox/Buttons"]
+custom_minimum_size = Vector2(140, 36)
+layout_mode = 2
+focus_mode = 0
+text = "[N / Esc] Stay Here"
 
 [node name="InfoPopup" type="PanelContainer" parent="."]
 visible = false

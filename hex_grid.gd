@@ -1,7 +1,7 @@
 class_name HexGrid
 extends Node2D
 ## Pointy-top hex grid using axial coordinates (x = q, y = r).
-## Owns the cave layout, pathfinding, spell targeting overlays, and drawing.
+## Supports generating connected adjacent hex rooms of identical size with shared walls.
 
 const SQRT3 := 1.7320508075688772
 const DIRECTIONS: Array[Vector2i] = [
@@ -13,7 +13,7 @@ const DIRECTIONS: Array[Vector2i] = [
 @export var hex_size := 26.0
 ## 0 = a different cave every run.
 @export var rng_seed := 0
-@export_range(0.0, 1.0) var fill_chance := 0.46
+@export_range(0.0, 1.0) var fill_chance := 0.44
 @export var smooth_passes := 3
 
 @export_group("Colors")
@@ -22,6 +22,8 @@ const DIRECTIONS: Array[Vector2i] = [
 @export var line_color := Color("2f4a3e")
 @export var hover_color := Color(1, 1, 1, 0.18)
 @export var path_color := Color("e8c547")
+@export var exit_locked_color := Color(0.95, 0.45, 0.2, 0.45)
+@export var exit_ready_color := Color(0.35, 0.95, 0.55, 0.75)
 
 ## cell -> true if wall, false if floor.
 var _tiles: Dictionary = {}
@@ -29,6 +31,12 @@ var _astar := AStar2D.new()
 var _ids: Dictionary = {}
 var _cells: Array[Vector2i] = []
 var _corners := PackedVector2Array()
+var _rng := RandomNumberGenerator.new()
+
+var current_room_center := Vector2i.ZERO
+var generated_rooms: Array[Vector2i] = []
+var exit_cells: Array[Vector2i] = []
+var room_cleared := false
 
 var hover_cell := Vector2i(1 << 20, 1 << 20)
 var path_preview: Array[Vector2i] = []
@@ -84,6 +92,10 @@ func is_walkable(cell: Vector2i) -> bool:
 	return _tiles.has(cell) and not _tiles[cell]
 
 
+func is_in_current_room(cell: Vector2i) -> bool:
+	return distance(cell, current_room_center) <= radius
+
+
 func walkable_neighbors(cell: Vector2i) -> Array[Vector2i]:
 	var result: Array[Vector2i] = []
 	for d in DIRECTIONS:
@@ -102,6 +114,71 @@ func cells_in_radius(center: Vector2i, r: int, walkable_only := true) -> Array[V
 	return result
 
 
+## Returns the 6 face-to-face offsets for hex rooms of `radius` so adjacent rooms share a 13-hex border wall.
+func _room_face_offsets() -> Array[Vector2i]:
+	var r := radius
+	return [
+		Vector2i(2 * r, -r),
+		Vector2i(r, r),
+		Vector2i(-r, 2 * r),
+		Vector2i(-2 * r, r),
+		Vector2i(-r, -r),
+		Vector2i(r, -2 * r),
+	]
+
+
+## Midpoint on the rim of `center` for face `face_idx` (0..5).
+func _face_midpoint(center: Vector2i, face_idx: int) -> Vector2i:
+	var r := radius
+	var half := r / 2
+	match face_idx:
+		0:
+			return center + Vector2i(r, -half)
+		1:
+			return center + Vector2i(r - half, half)
+		2:
+			return center + Vector2i(-half, r)
+		3:
+			return center + Vector2i(-r, half)
+		4:
+			return center + Vector2i(-r + half, -half)
+		_:
+			return center + Vector2i(half, -r)
+
+
+func get_face_index(center: Vector2i, edge_cell: Vector2i) -> int:
+	var dq := edge_cell.x - center.x
+	var dr := edge_cell.y - center.y
+	var ds := -dq - dr
+	var r := radius
+	if dq == r:
+		return 0
+	if ds == -r:
+		return 1
+	if dr == r:
+		return 2
+	if dq == -r:
+		return 3
+	if ds == r:
+		return 4
+	return 5
+
+
+func get_adjacent_room_center(center: Vector2i, edge_cell: Vector2i) -> Vector2i:
+	var offsets := _room_face_offsets()
+	var face_idx := get_face_index(center, edge_cell)
+	return center + offsets[face_idx]
+
+
+func is_unvisited_edge_cell(cell: Vector2i) -> bool:
+	if not is_walkable(cell):
+		return false
+	if distance(cell, current_room_center) != radius:
+		return false
+	var adj_center := get_adjacent_room_center(current_room_center, cell)
+	return not generated_rooms.has(adj_center)
+
+
 ## Returns cells along the straight hex line from `from` (exclusive) to `to` (inclusive),
 ## stopping if a wall is encountered.
 func hex_line(from: Vector2i, to: Vector2i, stop_at_walls := true) -> Array[Vector2i]:
@@ -111,7 +188,6 @@ func hex_line(from: Vector2i, to: Vector2i, stop_at_walls := true) -> Array[Vect
 		return result
 	for i in range(1, n + 1):
 		var t := float(i) / float(n)
-		# Small nudge prevents ties right on hex edges from zig-zagging.
 		var q := lerpf(float(from.x) + 1e-6, float(to.x) + 1e-6, t)
 		var r := lerpf(float(from.y) + 2e-6, float(to.y) + 2e-6, t)
 		var c := _axial_round(q, r)
@@ -130,35 +206,55 @@ func has_line_of_sight(from: Vector2i, to: Vector2i) -> bool:
 	return not line.is_empty() and line[line.size() - 1] == to
 
 
-func random_floor_cell(rng: RandomNumberGenerator, min_distance_from_center := 0) -> Vector2i:
+func random_floor_cell(rng: RandomNumberGenerator, min_distance_from_center := 0, avoid_cell := Vector2i(1 << 20, 1 << 20), min_avoid_dist := 0) -> Vector2i:
 	var options: Array[Vector2i] = []
 	for c in _cells:
-		if distance(c, Vector2i.ZERO) >= min_distance_from_center:
+		if distance(c, current_room_center) >= radius:
+			continue
+		if distance(c, current_room_center) >= min_distance_from_center and distance(c, avoid_cell) >= min_avoid_dist:
 			options.append(c)
 	if options.is_empty():
-		return Vector2i.ZERO
+		return current_room_center
 	return options[rng.randi_range(0, options.size() - 1)]
 
 
 func generate() -> void:
-	var rng := RandomNumberGenerator.new()
 	if rng_seed != 0:
-		rng.seed = rng_seed
+		_rng.seed = rng_seed
 	else:
-		rng.randomize()
+		_rng.randomize()
+	_tiles.clear()
+	generated_rooms.clear()
+	generate_room(Vector2i.ZERO, Vector2i.ZERO)
+
+
+## Generates a room of `radius` centered at `center` while preserving any shared boundary tiles
+## from already-generated adjacent rooms so walls and doorways connect seamlessly.
+func generate_room(center: Vector2i, entry_cell: Vector2i) -> void:
+	current_room_center = center
+	if not generated_rooms.has(center):
+		generated_rooms.append(center)
 
 	var region: Array[Vector2i] = []
-	for q in range(-radius, radius + 1):
-		for r in range(maxi(-radius, -q - radius), mini(radius, -q + radius) + 1):
-			region.append(Vector2i(q, r))
+	var locked: Dictionary = {}
+	for dq in range(-radius, radius + 1):
+		for dr in range(maxi(-radius, -dq - radius), mini(radius, -dq + radius) + 1):
+			var c := center + Vector2i(dq, dr)
+			region.append(c)
+			if _tiles.has(c):
+				locked[c] = true
+			elif distance(c, center) == radius:
+				# Outer rim defaults to solid cave wall until exit doorways are carved.
+				_tiles[c] = true
+			else:
+				_tiles[c] = _rng.randf() < fill_chance
 
-	_tiles.clear()
-	for c in region:
-		_tiles[c] = rng.randf() < fill_chance
-
-	for i in smooth_passes:
+	for _pass in smooth_passes:
 		var next := {}
 		for c in region:
+			if locked.has(c) or distance(c, center) == radius:
+				next[c] = _tiles[c]
+				continue
 			var walls := 0
 			for d in DIRECTIONS:
 				if _tiles.get(c + d, true):
@@ -169,28 +265,80 @@ func generate() -> void:
 				next[c] = false
 			else:
 				next[c] = _tiles[c]
-		_tiles = next
+		for c in region:
+			_tiles[c] = next[c]
 
-	# Guarantee open ground around the spawn point.
+	# Guarantee open ground around the room's center and around the entry cell.
 	for c in region:
-		if distance(c, Vector2i.ZERO) <= 2:
+		if distance(c, center) <= 2 and not locked.has(c):
+			_tiles[c] = false
+		if entry_cell != center and distance(c, entry_cell) <= 1 and distance(c, center) < radius and not locked.has(c):
 			_tiles[c] = false
 
-	# Fill in pockets the player could never reach.
-	var reachable := {Vector2i.ZERO: true}
-	var stack: Array[Vector2i] = [Vector2i.ZERO]
+	# Connect the entry doorway directly to the new room's center.
+	if entry_cell != center:
+		_carve_corridor(entry_cell, center, locked)
+
+	# Carve exit doorways on the 6 faces leading to unvisited adjacent rooms.
+	var offsets := _room_face_offsets()
+	for face_idx in 6:
+		var adj_center := center + offsets[face_idx]
+		var mid := _face_midpoint(center, face_idx)
+		if not generated_rooms.has(adj_center):
+			# Carve a 2-hex doorway on the rim and connect it to the room center.
+			_tiles[mid] = false
+			for d in DIRECTIONS:
+				var neighbor_rim := mid + d
+				if distance(neighbor_rim, center) == radius and not locked.has(neighbor_rim):
+					_tiles[neighbor_rim] = false
+					break
+			_carve_corridor(mid, center, locked)
+		else:
+			# Ensure any existing doorway on a shared wall connects into this room's center.
+			for c in region:
+				if locked.has(c) and not _tiles[c] and get_face_index(center, c) == face_idx:
+					_carve_corridor(c, center, locked)
+
+	# Fill in unreachable interior pockets inside this room.
+	var reachable := {center: true}
+	var stack: Array[Vector2i] = [center]
 	while not stack.is_empty():
 		var c: Vector2i = stack.pop_back()
 		for d in DIRECTIONS:
 			var n := c + d
-			if is_walkable(n) and not reachable.has(n):
+			if distance(n, center) <= radius and is_walkable(n) and not reachable.has(n):
 				reachable[n] = true
 				stack.append(n)
 	for c in region:
-		if not reachable.has(c):
+		if not reachable.has(c) and not locked.has(c):
 			_tiles[c] = true
 
 	_build_astar()
+	_refresh_exit_cells()
+	queue_redraw()
+
+
+func _carve_corridor(from: Vector2i, to: Vector2i, locked: Dictionary) -> void:
+	var line := hex_line(from, to, false)
+	for c in line:
+		if not locked.has(c):
+			_tiles[c] = false
+		for d in DIRECTIONS:
+			var side := c + d
+			if distance(side, current_room_center) < radius and not locked.has(side) and _rng.randf() < 0.35:
+				_tiles[side] = false
+
+
+func _refresh_exit_cells() -> void:
+	exit_cells.clear()
+	for c in _cells:
+		if is_unvisited_edge_cell(c):
+			exit_cells.append(c)
+
+
+func set_room_cleared(cleared: bool) -> void:
+	room_cleared = cleared
+	_refresh_exit_cells()
 	queue_redraw()
 
 
@@ -212,15 +360,22 @@ func _build_astar() -> void:
 
 ## Returns the cells to walk through, excluding `from`. Empty if unreachable.
 ## `blocked` cells (e.g. other creatures) are treated as walls for this query.
-func find_path(from: Vector2i, to: Vector2i, blocked: Array[Vector2i] = []) -> Array[Vector2i]:
+func find_path(from: Vector2i, to: Vector2i, blocked: Array[Vector2i] = [], restrict_to_current_room := false) -> Array[Vector2i]:
 	var result: Array[Vector2i] = []
 	if from == to or not _ids.has(from) or not _ids.has(to) or blocked.has(to):
+		return result
+	if restrict_to_current_room and not is_in_current_room(to):
 		return result
 	var disabled: Array[int] = []
 	for c in blocked:
 		if c != from and _ids.has(c):
 			_astar.set_point_disabled(_ids[c], true)
 			disabled.append(_ids[c])
+	if restrict_to_current_room:
+		for c in _cells:
+			if c != from and not is_in_current_room(c) and _ids.has(c):
+				_astar.set_point_disabled(_ids[c], true)
+				disabled.append(_ids[c])
 	var id_path := _astar.get_id_path(_ids[from], _ids[to])
 	for id in disabled:
 		_astar.set_point_disabled(id, false)
@@ -277,9 +432,22 @@ func _hex_polygon(center: Vector2) -> PackedVector2Array:
 func _draw() -> void:
 	for c in _tiles:
 		var points := _hex_polygon(cell_to_pixel(c))
-		draw_colored_polygon(points, wall_color if _tiles[c] else floor_color)
+		var in_active := is_in_current_room(c)
+		var base_col := wall_color if _tiles[c] else floor_color
+		if not in_active:
+			base_col = base_col.darkened(0.28)
+		draw_colored_polygon(points, base_col)
 		points.append(points[0])
-		draw_polyline(points, line_color, 1.0)
+		draw_polyline(points, line_color.darkened(0.25) if not in_active else line_color, 1.0)
+
+	# Highlight exit doorway hexes on the outer rim of the current room.
+	var exit_col := exit_ready_color if room_cleared else exit_locked_color
+	var exit_fill := Color(exit_col.r, exit_col.g, exit_col.b, 0.22 if room_cleared else 0.1)
+	for c in exit_cells:
+		var poly := _hex_polygon(cell_to_pixel(c))
+		draw_colored_polygon(poly, exit_fill)
+		poly.append(poly[0])
+		draw_polyline(poly, exit_col, 2.0)
 
 	# Draw valid cast range cells when aiming a spell.
 	if not spell_range_cells.is_empty():
