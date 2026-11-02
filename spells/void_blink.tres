@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="SpellData" format=3]
+
+[ext_resource type="Script" path="res://spell_data.gd" id="1_spell"]
+
+[resource]
+script = ExtResource("1_spell")
+display_name = "Void Blink"
+description = "Teleports you to an empty hex (ignores line of sight) and blasts adjacent foes on arrival."
+element = 3
+pattern = 4
+color = Color(0.78, 0.4, 1, 1)
+max_charges = 4
+cast_range = 6
+radius = 1
+damage = 3
+requires_los = false
+learn_cost = 1
+upgrade_cost = 1
+bonus_damage_per_level = 2
+bonus_charges_per_level = 2
+bonus_range_per_level = 2
+

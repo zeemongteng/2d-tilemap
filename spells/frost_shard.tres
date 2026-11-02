@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="SpellData" format=3]
+
+[ext_resource type="Script" path="res://spell_data.gd" id="1_spell"]
+
+[resource]
+script = ExtResource("1_spell")
+display_name = "Icicle"
+description = "Pinpoint shard of ice that freezes the target for 2 turns. Frozen foes skip turns and shatter for +50% melee damage."
+element = 2
+pattern = 0
+color = Color(0.35, 0.85, 1, 1)
+max_charges = 6
+cast_range = 5
+damage = 4
+status_duration = 2
+learn_cost = 1
+upgrade_cost = 1
+bonus_damage_per_level = 2
+bonus_charges_per_level = 2
+bonus_range_per_level = 1
+

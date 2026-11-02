@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="ItemData" format=3 uid="uid://c3w1hdufxixum"]
+
+[ext_resource type="Script" uid="uid://12lxbvqimuf0" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Mana Potion"
+description = "Glowing azure liquid humming with raw aether. Restores charges to all of your learned spells."
+glyph = "!"
+color = Color(0.25, 0.65, 1, 1)
+type = 3
+charge_restore = 3

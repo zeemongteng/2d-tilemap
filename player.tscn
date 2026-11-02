@@ -1,0 +1,16 @@
+[gd_scene format=3 uid="uid://b4hief00w67g1"]
+
+[ext_resource type="Script" uid="uid://b3q20tocghyqk" path="res://actor.gd" id="1_actor"]
+[ext_resource type="Script" uid="uid://dvf7ra767ki0v" path="res://stats.gd" id="2_stats"]
+
+[sub_resource type="Resource" id="Resource_stats"]
+script = ExtResource("2_stats")
+max_hp = 24
+attack = 4
+defense = 1
+
+[node name="Player" type="Node2D" unique_id=1357012180]
+script = ExtResource("1_actor")
+display_name = "You"
+color = Color(0.949, 0.914, 0.788, 1)
+stats = SubResource("Resource_stats")

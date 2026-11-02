@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="ItemData" format=3 uid="uid://5ihsis2ijbco"]
+
+[ext_resource type="Script" uid="uid://12lxbvqimuf0" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Healing Potion"
+description = "A warm crimson draught brewed from subterranean lichen. Quickly knits torn flesh."
+glyph = "!"
+color = Color(0.9, 0.3, 0.6, 1)
+heal_amount = 10

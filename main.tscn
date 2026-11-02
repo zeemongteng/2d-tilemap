@@ -1,0 +1,40 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://game.gd" id="1_game"]
+[ext_resource type="Script" path="res://hex_grid.gd" id="2_grid"]
+[ext_resource type="PackedScene" path="res://player.tscn" id="3_player"]
+[ext_resource type="PackedScene" path="res://goblin.tscn" id="4_goblin"]
+[ext_resource type="PackedScene" path="res://world_item.tscn" id="5_world_item"]
+[ext_resource type="PackedScene" path="res://hud.tscn" id="6_hud"]
+[ext_resource type="Resource" path="res://items/rusty_sword.tres" id="7_sword"]
+[ext_resource type="Resource" path="res://items/iron_axe.tres" id="8_axe"]
+[ext_resource type="Resource" path="res://items/leather_armor.tres" id="9_leather"]
+[ext_resource type="Resource" path="res://items/chain_mail.tres" id="10_mail"]
+[ext_resource type="Resource" path="res://items/healing_potion.tres" id="11_potion"]
+[ext_resource type="Resource" path="res://items/mana_potion.tres" id="12_mana"]
+[ext_resource type="Resource" path="res://items/spell_orb.tres" id="13_orb"]
+[ext_resource type="Resource" path="res://spells/fireball.tres" id="14_fireball"]
+[ext_resource type="Resource" path="res://spells/lightning_bolt.tres" id="15_lightning"]
+[ext_resource type="Resource" path="res://spells/frost_shard.tres" id="16_icicle"]
+[ext_resource type="Resource" path="res://spells/chain_lightning.tres" id="17_chain"]
+[ext_resource type="Resource" path="res://spells/void_blink.tres" id="18_blink"]
+[ext_resource type="Resource" path="res://spells/arcane_nova.tres" id="19_nova"]
+
+[node name="Main" type="Node2D"]
+script = ExtResource("1_game")
+player_scene = ExtResource("3_player")
+monster_scene = ExtResource("4_goblin")
+world_item_scene = ExtResource("5_world_item")
+item_pool = Array[Resource]([ExtResource("7_sword"), ExtResource("8_axe"), ExtResource("9_leather"), ExtResource("10_mail"), ExtResource("11_potion"), ExtResource("12_mana"), ExtResource("12_mana"), ExtResource("13_orb")])
+starting_items = Array[Resource]([ExtResource("12_mana"), ExtResource("11_potion")])
+starting_spells = Array[Resource]([ExtResource("14_fireball"), ExtResource("15_lightning"), ExtResource("16_icicle")])
+spell_catalog = Array[Resource]([ExtResource("14_fireball"), ExtResource("15_lightning"), ExtResource("16_icicle"), ExtResource("17_chain"), ExtResource("18_blink"), ExtResource("19_nova")])
+
+[node name="HexGrid" type="Node2D" parent="."]
+script = ExtResource("2_grid")
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position_smoothing_enabled = true
+position_smoothing_speed = 8.0
+
+[node name="Hud" parent="." instance=ExtResource("6_hud")]
