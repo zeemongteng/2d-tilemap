@@ -11,14 +11,17 @@ const SPELL_HOTKEYS: Array[Key] = [KEY_Q, KEY_W, KEY_E, KEY_F, KEY_G, KEY_C]
 @export var monster_scene: PackedScene
 @export var monster_pool: Array[PackedScene]
 @export var spawner_scene: PackedScene
+@export var boss_scene: PackedScene
 @export var world_item_scene: PackedScene
 @export var item_pool: Array[Resource]
+@export var relic_pool: Array[Resource]
 @export var starting_items: Array[Resource]
 @export var starting_spells: Array[Resource]
 @export var spell_catalog: Array[Resource]
 @export var monster_count := 6
 @export var spawner_count := 2
 @export var item_count := 7
+@export var relic_spawn_chance := 0.45
 @export var monster_sight := 6
 
 @onready var grid: HexGrid = $HexGrid
@@ -72,31 +75,61 @@ func _process(_delta: float) -> void:
 
 # --- room generation & spawning -------------------------------------------
 
+static func _is_boss_room(room_num: int) -> bool:
+	return room_num >= 2 and (room_num - 2) % 3 == 0
+
+
+func _active_boss() -> Actor:
+	for m in monsters:
+		if m.is_boss and not m.is_dead():
+			return m
+	return null
+
+
 func _populate_current_room(entry_cell: Vector2i) -> void:
 	_room_cleared = false
 	_active_spell_index = -1
 	grid.set_room_cleared(false)
 	grid.clear_spell_preview()
+	grid.set_danger_cells([])
 
-	var total_spawners := spawner_count + (room_level - 1) / 2
-	for i in total_spawners:
-		var cell := grid.random_floor_cell(_rng, 4, entry_cell, 5)
-		if not _is_occupied(cell):
-			var spawner := _spawn_actor(spawner_scene if spawner_scene != null else monster_scene, cell)
-			if spawner.spawn_scene == null:
-				spawner.spawn_scene = _random_monster_scene()
-			monsters.append(spawner)
+	if _is_boss_room(room_level) and boss_scene != null:
+		var boss_cell := grid.current_room_center
+		grid.crush_walls_in_radius(boss_cell, 2)
+		var boss := _spawn_actor(boss_scene, boss_cell)
+		var extra_hp := maxi(0, (room_level - 2) * 8)
+		boss.stats.max_hp += extra_hp
+		boss.stats.hp = boss.stats.max_hp
+		monsters.append(boss)
+		for i in 2 + (room_level / 3):
+			var minion_cell := grid.random_floor_cell(_rng, 4, entry_cell, 5)
+			if not _is_occupied(minion_cell):
+				monsters.append(_spawn_actor(_random_monster_scene(), minion_cell))
+	else:
+		var total_spawners := spawner_count + (room_level - 1) / 2
+		for i in total_spawners:
+			var cell := grid.random_floor_cell(_rng, 4, entry_cell, 5)
+			if not _is_occupied(cell):
+				var spawner := _spawn_actor(spawner_scene if spawner_scene != null else monster_scene, cell)
+				if spawner.spawn_scene == null:
+					spawner.spawn_scene = _random_monster_scene()
+				monsters.append(spawner)
 
-	var total_monsters := monster_count + (room_level - 1) * 2
-	for i in total_monsters:
-		var cell := grid.random_floor_cell(_rng, 3, entry_cell, 4)
-		if not _is_occupied(cell):
-			monsters.append(_spawn_actor(_random_monster_scene(), cell))
+		var total_monsters := monster_count + (room_level - 1) * 2
+		for i in total_monsters:
+			var cell := grid.random_floor_cell(_rng, 3, entry_cell, 4)
+			if not _is_occupied(cell):
+				monsters.append(_spawn_actor(_random_monster_scene(), cell))
 
 	for i in item_count:
 		var cell := grid.random_floor_cell(_rng, 2, entry_cell, 2)
 		if not _is_occupied(cell) and _item_at(cell) == null:
 			_spawn_item(_random_item(), cell)
+
+	if _rng.randf() < relic_spawn_chance:
+		var relic_cell := grid.random_floor_cell(_rng, 4, entry_cell, 4)
+		if not _is_occupied(relic_cell) and _item_at(relic_cell) == null:
+			_spawn_item(_random_relic(), relic_cell)
 
 
 func _on_next_room_confirmed(edge_cell: Vector2i) -> void:
@@ -105,7 +138,8 @@ func _on_next_room_confirmed(edge_cell: Vector2i) -> void:
 	_busy = true
 	room_level += 1
 	var next_center := grid.get_adjacent_room_center(grid.current_room_center, edge_cell)
-	grid.generate_room(next_center, edge_cell)
+	var boss_room := _is_boss_room(room_level)
+	grid.generate_room(next_center, edge_cell, boss_room)
 
 	# Step 1 hex inward toward the new room center if walkable so the player stands inside the new room.
 	var step_in := edge_cell
@@ -120,7 +154,26 @@ func _on_next_room_confirmed(edge_cell: Vector2i) -> void:
 		_pickup()
 
 	_populate_current_room(player.cell)
-	hud.post("Entered Room %d! %d foes await." % [room_level, monsters.size()])
+	if boss_room:
+		hud.post("⚠ BOSS LAIR (Room %d)! The 7-hex Rift Colossus awakens!" % room_level)
+	else:
+		hud.post("Entered Room %d! %d foes await." % [room_level, monsters.size()])
+
+	# Storm Core Relic effect on entering a new room:
+	var storm_count := player.count_relic(ItemData.RelicEffect.STORM_CORE)
+	if storm_count > 0 and not monsters.is_empty():
+		player.restore_all_spells(storm_count)
+		var target := monsters[_rng.randi_range(0, monsters.size() - 1)]
+		var zap_dmg := 7 * storm_count
+		var arc: Array[Vector2] = [grid.cell_to_pixel(player.cell), grid.cell_to_pixel(target.cell)]
+		grid.play_spell_vfx([target.cell], Color(0.35, 0.85, 1.0), arc)
+		target.take_damage(zap_dmg, Color(0.35, 0.85, 1.0))
+		hud.post("Storm Core zaps %s for %d and restores +%d spell charge(s)!" % [
+			target.display_name.to_lower(), zap_dmg, storm_count
+		])
+		if target.is_dead():
+			_handle_monster_death(target)
+
 	_busy = false
 	_refresh_hud()
 	_refresh_hover()
@@ -132,7 +185,8 @@ func _check_edge_trigger() -> bool:
 	if not _room_cleared:
 		hud.post("The passage out of this room is sealed until all monsters are defeated!")
 		return false
-	hud.prompt_next_room(room_level + 1, player.cell)
+	var next_room := room_level + 1
+	hud.prompt_next_room(next_room, player.cell, _is_boss_room(next_room))
 	return true
 
 
@@ -165,8 +219,22 @@ func _random_item() -> ItemData:
 	return item_pool[_rng.randi_range(0, item_pool.size() - 1)] as ItemData
 
 
+func _random_relic() -> ItemData:
+	if relic_pool.is_empty():
+		return null
+	var unowned: Array[ItemData] = []
+	for res in relic_pool:
+		if res is ItemData:
+			var r := res as ItemData
+			if not player.has_relic(r.relic_effect):
+				unowned.append(r)
+	if not unowned.is_empty():
+		return unowned[_rng.randi_range(0, unowned.size() - 1)]
+	return relic_pool[_rng.randi_range(0, relic_pool.size() - 1)] as ItemData
+
+
 func _refresh_hud() -> void:
-	hud.refresh(player, turn, _active_spell_index, room_level, monsters.size(), _room_cleared)
+	hud.refresh(player, turn, _active_spell_index, room_level, monsters.size(), _room_cleared, _active_boss())
 
 
 # --- lookups --------------------------------------------------------------
@@ -177,7 +245,7 @@ func _is_occupied(cell: Vector2i) -> bool:
 
 func _monster_at(cell: Vector2i) -> Actor:
 	for m in monsters:
-		if m.cell == cell:
+		if m.occupies_cell(cell):
 			return m
 	return null
 
@@ -189,16 +257,19 @@ func _item_at(cell: Vector2i) -> WorldItem:
 	return null
 
 
-func _monster_cells() -> Array[Vector2i]:
+func _monster_cells(exclude_actor: Actor = null) -> Array[Vector2i]:
 	var cells: Array[Vector2i] = []
 	for m in monsters:
-		cells.append(m.cell)
+		if m == exclude_actor:
+			continue
+		for occ in m.occupied_cells():
+			cells.append(occ)
 	return cells
 
 
 func _monster_adjacent() -> bool:
 	for m in monsters:
-		if HexGrid.distance(m.cell, player.cell) == 1:
+		if m.distance_to_cell(player.cell) == 1:
 			return true
 	return false
 
@@ -251,7 +322,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				_try_cast_active_spell(cell)
 				return
 			var target := _monster_at(cell)
-			if target != null and HexGrid.distance(player.cell, cell) == 1:
+			if target != null and target.distance_to_cell(player.cell) == 1:
 				_attack_turn(target)
 				return
 			var path := _path_to(cell)
@@ -270,16 +341,14 @@ func _unhandled_input(event: InputEvent) -> void:
 			_wait()
 
 
-## Path to a cell; clicking a monster paths up to (not into) it.
-## While monsters are alive, pathfinding stays inside the current room.
+## Path to a cell; clicking a monster paths up to (not into) its occupied hexes.
 func _path_to(cell: Vector2i) -> Array[Vector2i]:
 	var target := _monster_at(cell)
-	var blocked := _monster_cells()
-	if target != null:
-		blocked.erase(cell)
+	var blocked := _monster_cells(target)
 	var path := grid.find_path(player.cell, cell, blocked, not _room_cleared)
 	if target != null and not path.is_empty():
-		path.pop_back()
+		while not path.is_empty() and target.occupies_cell(path[path.size() - 1]):
+			path.pop_back()
 	return path
 
 
@@ -366,7 +435,7 @@ func _on_spell_upgrade_requested(spell: SpellData) -> void:
 func _valid_spell_targets(spell: SpellData) -> Array[Vector2i]:
 	if spell.pattern == SpellData.Pattern.NOVA:
 		return grid.cells_in_radius(player.cell, spell.effective_radius(), true)
-	var r := spell.effective_range()
+	var r := spell.effective_range() + player.total_spell_range_bonus()
 	var candidates := grid.cells_in_radius(player.cell, r, true)
 	var valid: Array[Vector2i] = []
 	for c in candidates:
@@ -405,18 +474,25 @@ func _compute_spell_aoe(spell: SpellData, target_cell: Vector2i) -> Array[Vector
 func _compute_chain_cells(start_cell: Vector2i, jump_range: int, max_jumps: int) -> Array[Vector2i]:
 	var result: Array[Vector2i] = [start_cell]
 	var current := start_cell
+	var hit_actors: Array[Actor] = []
+	var first_m := _monster_at(start_cell)
+	if first_m != null:
+		hit_actors.append(first_m)
 	for _i in max_jumps:
 		var best_cell := current
 		var best_dist := 999
+		var best_m: Actor = null
 		for m in monsters:
-			if result.has(m.cell):
+			if hit_actors.has(m):
 				continue
-			var d := HexGrid.distance(current, m.cell)
+			var d := m.distance_to_cell(current)
 			if d <= jump_range and d < best_dist:
 				best_dist = d
 				best_cell = m.cell
-		if best_cell == current:
+				best_m = m
+		if best_m == null:
 			break
+		hit_actors.append(best_m)
 		result.append(best_cell)
 		current = best_cell
 	return result
@@ -438,7 +514,11 @@ func _cast_spell(spell: SpellData, target_cell: Vector2i) -> void:
 	_active_spell_index = -1
 	grid.clear_spell_preview()
 
-	spell.charges = maxi(0, spell.charges - 1)
+	var free_cast := player.has_relic(ItemData.RelicEffect.ARCANE_PRISM) and _rng.randf() < 0.35
+	if not free_cast:
+		spell.charges = maxi(0, spell.charges - 1)
+	var free_note := " (Arcane Prism: free cast!)" if free_cast else ""
+
 	var aoe_cells := _compute_spell_aoe(spell, target_cell)
 	var arc_points: Array[Vector2] = []
 
@@ -456,27 +536,42 @@ func _cast_spell(spell: SpellData, target_cell: Vector2i) -> void:
 
 	var hit_names: Array[String] = []
 	var hit_monsters: Array[Actor] = []
+	var overlap_counts: Dictionary = {}
 	for c in aoe_cells:
 		var m := _monster_at(c)
-		if m != null and not hit_monsters.has(m):
-			hit_monsters.append(m)
+		if m != null:
+			if not hit_monsters.has(m):
+				hit_monsters.append(m)
+				overlap_counts[m] = 1
+			else:
+				overlap_counts[m] = int(overlap_counts[m]) + 1
 
+	var bonus_dmg := player.total_spell_damage_bonus()
+	var bonus_afflicted := player.total_afflicted_damage_bonus()
+	var bonus_dur := player.total_status_duration_bonus()
+	var bonus_burn := player.total_burn_damage_bonus()
 	for m in hit_monsters:
-		var dmg := spell.effective_damage()
-		if spell.element == SpellData.Element.FIRE and m.frozen_turns > 0:
-			dmg = int(ceil(float(dmg) * 1.5))
+		var overlaps: int = int(overlap_counts.get(m, 1))
+		var overlap_mult := 1.0 + 0.25 * float(overlaps - 1)
+		var dmg := spell.effective_damage() + bonus_dmg
+		if m.has_any_status():
+			dmg += bonus_afflicted
+		dmg = int(ceil(float(dmg) * overlap_mult * m.incoming_damage_multiplier()))
+		if spell.element == SpellData.Element.FIRE:
+			m.consume_shatter_statuses()
 		m.take_damage(dmg, spell.color)
-		if spell.status_duration > 0:
-			if spell.element == SpellData.Element.FIRE:
-				m.apply_burn(spell.status_duration, 2)
-			elif spell.element in [SpellData.Element.ICE, SpellData.Element.ARCANE]:
-				m.apply_freeze(spell.status_duration)
-		hit_names.append("%s (%d)" % [m.display_name.to_lower(), dmg])
+		if spell.status_effect != null and spell.status_duration > 0:
+			var extra_dot := bonus_burn if spell.status_effect.id == "burn" else 0
+			m.apply_status(spell.status_effect, spell.status_duration + bonus_dur, extra_dot)
+		if overlaps > 1:
+			hit_names.append("%s (%d, %d hexes!)" % [m.display_name.to_lower(), dmg, overlaps])
+		else:
+			hit_names.append("%s (%d)" % [m.display_name.to_lower(), dmg])
 
 	if hit_names.is_empty():
-		hud.post("You cast %s." % spell.display_name)
+		hud.post("You cast %s.%s" % [spell.display_name, free_note])
 	else:
-		hud.post("You cast %s, hitting %s." % [spell.display_name, ", ".join(hit_names)])
+		hud.post("You cast %s, hitting %s.%s" % [spell.display_name, ", ".join(hit_names), free_note])
 
 	for m in hit_monsters:
 		if m.is_dead():
@@ -519,6 +614,9 @@ func _use_item(index: int) -> void:
 		ItemData.Type.SPELL_ORB:
 			player.spell_points += item.sp_amount
 			hud.post("You absorb the %s (+%d SP)." % [item.display_name.to_lower(), item.sp_amount])
+		ItemData.Type.RELIC:
+			player.add_relic(item)
+			hud.post("★ RELIC ACQUIRED: %s! %s" % [item.display_name, item.description])
 		_:
 			player.equip(item)
 			hud.post("You equip the %s." % item.display_name.to_lower())
@@ -568,6 +666,13 @@ func _pickup() -> bool:
 	var item := _item_at(player.cell)
 	if item == null:
 		return false
+	if item.data.type == ItemData.Type.RELIC:
+		player.add_relic(item.data)
+		items.erase(item)
+		grid.play_spell_vfx([player.cell], item.data.color)
+		hud.post("★ RELIC ACQUIRED: %s — %s" % [item.data.display_name, item.data.description])
+		item.queue_free()
+		return true
 	if item.data.type == ItemData.Type.SPELL_ORB:
 		player.spell_points += item.data.sp_amount
 		items.erase(item)
@@ -588,11 +693,10 @@ func _pickup() -> bool:
 
 func _attack(attacker: Actor, defender: Actor) -> void:
 	var damage := maxi(1, attacker.total_attack() - defender.total_defense() + _rng.randi_range(-1, 1))
-	var shattered := false
-	if defender.frozen_turns > 0:
-		damage = int(ceil(float(damage) * 1.5))
-		defender.frozen_turns = 0
-		shattered = true
+	if attacker == player and defender.has_any_status():
+		damage += player.total_afflicted_damage_bonus()
+	damage = int(ceil(float(damage) * defender.incoming_damage_multiplier()))
+	var shattered := defender.consume_shatter_statuses()
 	defender.take_damage(damage)
 	var shatter_note := " (SHATTER!)" if shattered else ""
 	hud.post("%s %s %s for %d%s." % [
@@ -615,13 +719,41 @@ func _handle_monster_death(defender: Actor) -> void:
 	if not monsters.has(defender):
 		return
 	monsters.erase(defender)
+	if defender.is_boss:
+		defender.telegraph_cells.clear()
+		grid.set_danger_cells([])
 	_kills += 1
-	var sp_gain := 1 if (defender.is_spawner or _kills % 2 == 0) else 0
+	var sp_gain := 3 if defender.is_boss else (1 if (defender.is_spawner or _kills % 2 == 0) else 0)
 	player.spell_points += sp_gain
-	var sp_msg := " (+%d SP)" % sp_gain if sp_gain > 0 else ""
-	hud.post("%s is destroyed!%s" % [defender.display_name, sp_msg] if defender.is_spawner else "%s dies.%s" % [defender.display_name, sp_msg])
-	if _rng.randf() < defender.loot_chance and _item_at(defender.cell) == null:
-		_spawn_item(_random_item(), defender.cell)
+	var blood_stacks := player.count_relic(ItemData.RelicEffect.BURNING_BLOOD)
+	if blood_stacks > 0:
+		player.heal(2 * blood_stacks)
+	var bonus_notes: Array[String] = []
+	if sp_gain > 0:
+		bonus_notes.append("+%d SP" % sp_gain)
+	if blood_stacks > 0:
+		bonus_notes.append("+%d HP" % (2 * blood_stacks))
+	var note_str := " (%s)" % ", ".join(bonus_notes) if not bonus_notes.is_empty() else ""
+
+	if defender.is_boss:
+		hud.post("★ BOSS VANQUISHED: %s falls!%s Dropped a Relic and Mana Potion!" % [defender.display_name, note_str])
+		if _item_at(defender.cell) == null:
+			_spawn_item(_random_relic(), defender.cell)
+		for n in grid.walkable_neighbors(defender.cell):
+			if _item_at(n) == null:
+				for it_res in starting_items:
+					if it_res is ItemData and (it_res as ItemData).type == ItemData.Type.MANA_POTION:
+						_spawn_item(it_res as ItemData, n)
+						break
+				break
+	else:
+		hud.post("%s is destroyed!%s" % [defender.display_name, note_str] if defender.is_spawner else "%s dies.%s" % [defender.display_name, note_str])
+		if _item_at(defender.cell) == null:
+			if defender.is_spawner and _rng.randf() < 0.25:
+				_spawn_item(_random_relic(), defender.cell)
+			elif _rng.randf() < defender.loot_chance:
+				_spawn_item(_random_item(), defender.cell)
+
 	defender.queue_free()
 	_check_room_cleared()
 
@@ -631,35 +763,45 @@ func _check_room_cleared() -> void:
 		return
 	_room_cleared = true
 	grid.set_room_cleared(true)
+	grid.set_danger_cells([])
 	player.spell_points += 2
 	player.restore_all_spells(1)
+	var blood_stacks := player.count_relic(ItemData.RelicEffect.BURNING_BLOOD)
+	if blood_stacks > 0:
+		player.heal(5 * blood_stacks)
 	grid.play_spell_vfx(grid.cells_in_radius(player.cell, 2, true), Color(0.35, 0.95, 0.55))
 	hud.post("★ ROOM %d CLEARED! (+2 SP, +1 spell charge). Walk to any glowing green edge passage to enter the next room!" % room_level)
 	_check_edge_trigger()
 
 
-# --- monster & spawner turns ----------------------------------------------
+# --- monster, spawner & boss turns ----------------------------------------
 
 func _monsters_act() -> void:
 	if _process_actor_statuses(player):
 		return
 	var tween: Tween
-	var acting_monsters := monsters.duplicate()
+	var acting_monsters: Array[Actor] = monsters.duplicate()
 	for m in acting_monsters:
 		if not is_instance_valid(m) or m.is_dead():
 			continue
 		if _process_actor_statuses(m):
 			continue
-		if m.frozen_turns > 0:
-			m.frozen_turns -= 1
-			m.queue_redraw()
+		if m.skips_turn_from_status():
+			m.tick_skip_turn_statuses()
 			continue
-		if m.regen_per_turn > 0 and m.burn_turns <= 0 and m.stats.hp < m.stats.max_hp:
+		if m.regen_per_turn > 0 and not m.blocks_regen_from_status() and m.stats.hp < m.stats.max_hp:
 			m.heal(m.regen_per_turn)
+		if m.is_boss:
+			var boss_tween := _boss_act(m)
+			if boss_tween != null:
+				tween = boss_tween
+			if _dead:
+				break
+			continue
 		if m.is_spawner:
 			_spawner_act(m)
 			continue
-		var dist := HexGrid.distance(m.cell, player.cell)
+		var dist := m.distance_to_cell(player.cell)
 		if dist == 1:
 			_attack(m, player)
 			if _dead:
@@ -677,6 +819,86 @@ func _monsters_act() -> void:
 		await tween.finished
 	else:
 		await get_tree().create_timer(STEP_TIME).timeout
+
+
+func _boss_act(boss: Actor) -> Tween:
+	# 1. Resolve telegraphed Ground Slam if one was prepared last turn.
+	if not boss.telegraph_cells.is_empty():
+		var slam_cells := boss.telegraph_cells.duplicate()
+		boss.telegraph_cells.clear()
+		grid.set_danger_cells([])
+		grid.play_spell_vfx(slam_cells, Color(1.0, 0.25, 0.2))
+		if slam_cells.has(player.cell):
+			var dmg := maxi(1, boss.slam_damage - player.total_defense())
+			player.take_damage(dmg, Color(1.0, 0.25, 0.2))
+			hud.post("💥 %s's Ground Slam crushes you for %d!" % [boss.display_name, dmg])
+			if player.is_dead():
+				_dead = true
+				hud.post("You are crushed by %s. Press R to start over." % boss.display_name.to_lower())
+		else:
+			hud.post("💥 %s's Ground Slam shatters the cave floor!" % boss.display_name)
+		return null
+
+	boss.spawn_cooldown -= 1
+	boss.ability_cooldown -= 1
+
+	# 2. Periodically summon an imp minion at the boss's 7-hex perimeter.
+	if boss.spawn_cooldown <= 0:
+		boss.spawn_cooldown = boss.spawn_interval
+		var ring := grid.cells_in_radius(boss.cell, boss.footprint_radius + 1, true)
+		var spawn_options: Array[Vector2i] = []
+		for c in ring:
+			if HexGrid.distance(c, boss.cell) == boss.footprint_radius + 1 and grid.is_in_current_room(c) and not _is_occupied(c):
+				spawn_options.append(c)
+		if not spawn_options.is_empty():
+			var sc := spawn_options[_rng.randi_range(0, spawn_options.size() - 1)]
+			var minion_scene := boss.spawn_scene if boss.spawn_scene != null else _random_monster_scene()
+			var minion := _spawn_actor(minion_scene, sc)
+			monsters.append(minion)
+			grid.play_spell_vfx([sc], boss.color)
+			hud.post("%s summons %s!" % [boss.display_name, minion.display_name.to_lower()])
+			return null
+
+	# 3. Telegraph a 7-hex Ground Slam around the player's position.
+	var dist_to_player := boss.distance_to_cell(player.cell)
+	if boss.ability_cooldown <= 0 and dist_to_player <= 5:
+		boss.ability_cooldown = 3
+		boss.telegraph_cells = grid.cells_in_radius(player.cell, 1, true)
+		grid.set_danger_cells(boss.telegraph_cells)
+		hud.post("⚠ %s raises its colossus fists! Move out of the red danger zone!" % boss.display_name)
+		return null
+
+	# 4. Melee crush if adjacent to any of the boss's 7 hexes.
+	if dist_to_player <= 1:
+		_attack(boss, player)
+		return null
+
+	# 5. March 1 step toward the player, crushing interior cave walls under its 7-hex body.
+	var best_step := boss.cell
+	var best_dist := HexGrid.distance(boss.cell, player.cell)
+	for d in HexGrid.DIRECTIONS:
+		var cand := boss.cell + d
+		if HexGrid.distance(cand, grid.current_room_center) >= grid.radius - boss.footprint_radius:
+			continue
+		var new_footprint := boss.occupied_cells_at(cand)
+		if new_footprint.has(player.cell):
+			continue
+		var blocked_by_minion := false
+		for other in monsters:
+			if other != boss and new_footprint.has(other.cell):
+				blocked_by_minion = true
+				break
+		if blocked_by_minion:
+			continue
+		var cand_dist := HexGrid.distance(cand, player.cell)
+		if cand_dist < best_dist:
+			best_dist = cand_dist
+			best_step = cand
+
+	if best_step != boss.cell:
+		grid.crush_walls_in_radius(best_step, boss.footprint_radius)
+		return boss.move_to(best_step, STEP_TIME)
+	return null
 
 
 func _spawner_act(spawner: Actor) -> void:
@@ -712,27 +934,32 @@ func _ranged_monster_attack(attacker: Actor, defender: Actor) -> void:
 
 
 func _process_actor_statuses(actor: Actor) -> bool:
-	if actor.burn_turns <= 0:
+	if actor.statuses.is_empty():
 		return false
-	actor.burn_turns -= 1
-	actor.take_damage(actor.burn_damage, Color(1.0, 0.45, 0.1))
-	hud.post("%s burns for %d." % [actor.display_name, actor.burn_damage])
-	if actor.is_dead():
-		if actor == player:
-			_dead = true
-			hud.post("You burn to death. Press R to start over.")
-		else:
-			_handle_monster_death(actor)
-		return true
+	for i in range(actor.statuses.size() - 1, -1, -1):
+		var st := actor.statuses[i]
+		if st.skips_turn:
+			continue
+		st.turns_left -= 1
+		if st.damage_per_turn > 0:
+			actor.take_damage(st.damage_per_turn, st.color)
+			hud.post("%s takes %d %s damage." % [actor.display_name, st.damage_per_turn, st.display_name.to_lower()])
+		if st.turns_left <= 0:
+			actor.statuses.remove_at(i)
+		actor.queue_redraw()
+		if actor.is_dead():
+			if actor == player:
+				_dead = true
+				hud.post("You succumb to %s. Press R to start over." % st.display_name.to_lower())
+			else:
+				_handle_monster_death(actor)
+			return true
 	return false
 
 
 func _monster_step(m: Actor) -> Vector2i:
 	if HexGrid.distance(m.cell, player.cell) <= monster_sight:
-		var others: Array[Vector2i] = []
-		for other in monsters:
-			if other != m:
-				others.append(other.cell)
+		var others := _monster_cells(m)
 		var path := grid.find_path(m.cell, player.cell, others, true)
 		if not path.is_empty():
 			return path[0]

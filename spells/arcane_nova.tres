@@ -1,6 +1,7 @@
 [gd_resource type="Resource" script_class="SpellData" format=3]
 
 [ext_resource type="Script" path="res://spell_data.gd" id="1_spell"]
+[ext_resource type="Resource" path="res://statuses/freeze.tres" id="2_freeze"]
 
 [resource]
 script = ExtResource("1_spell")
@@ -13,10 +14,10 @@ max_charges = 3
 cast_range = 0
 radius = 2
 damage = 6
+status_effect = ExtResource("2_freeze")
 status_duration = 1
 learn_cost = 2
 upgrade_cost = 2
 bonus_damage_per_level = 3
 bonus_charges_per_level = 1
 bonus_radius_per_level = 1
-

@@ -17,6 +17,7 @@ enum Pattern { SINGLE, BLAST, BEAM, CHAIN, BLINK, NOVA }
 @export var radius := 0
 @export var chain_jumps := 0
 @export var damage := 4
+@export var status_effect: StatusData
 @export var status_duration := 0
 @export var requires_los := true
 
@@ -118,9 +119,10 @@ func describe_details() -> String:
 	]
 	if effective_range() > 0:
 		parts.append("Rng %d" % effective_range())
+	if status_effect != null and status_duration > 0:
+		parts.append("%s (%dt)" % [status_effect.display_name, status_duration])
 	parts.append("%d Charges" % effective_max_charges())
 	var stats_line := "  •  ".join(parts)
 	if description.is_empty():
 		return stats_line
 	return "%s\n%s" % [stats_line, description]
-

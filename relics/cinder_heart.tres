@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Cinder Heart"
+description = "An ember of the primordial furnace. Increases Burn damage by +3 per turn and extends status durations by +1 turn."
+glyph = "?"
+color = Color(1, 0.48, 0.12, 1)
+type = 5
+burn_damage_bonus = 3
+status_duration_bonus = 1
+relic_effect = 6
+

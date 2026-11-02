@@ -1,0 +1,27 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://actor.gd" id="1_actor"]
+[ext_resource type="Script" path="res://stats.gd" id="2_stats"]
+[ext_resource type="PackedScene" path="res://monsters/fire_imp.tscn" id="3_imp"]
+
+[sub_resource type="Resource" id="Resource_stats"]
+script = ExtResource("2_stats")
+max_hp = 48
+attack = 6
+defense = 1
+
+[node name="RiftColossus" type="Node2D"]
+script = ExtResource("1_actor")
+display_name = "The Rift Colossus"
+description = "Towering 7-hex titan that crushes cave walls, telegraphs 7-hex Ground Slams, and summons imps. AoE spells hitting multiple body hexes deal +25% bonus damage per extra hex!"
+glyph = "Ω"
+color = Color(1, 0.28, 0.35, 1)
+font_size = 44
+stats = SubResource("Resource_stats")
+loot_chance = 1.0
+spawn_interval = 4
+spawn_scene = ExtResource("3_imp")
+is_boss = true
+footprint_radius = 1
+slam_damage = 8
+

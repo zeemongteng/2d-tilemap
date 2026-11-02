@@ -1,6 +1,6 @@
 class_name Actor
 extends Node2D
-## Anything that occupies one hex and takes a turn: the player, monsters, spawners.
+## Anything that occupies one (or 7, for bosses) hexes and takes a turn: the player, monsters, spawners, bosses.
 
 @export var display_name := "Actor"
 @export_multiline var description := ""
@@ -17,19 +17,23 @@ extends Node2D
 @export var is_spawner := false
 @export var spawn_interval := 4
 @export var spawn_scene: PackedScene
+@export var is_boss := false
+@export var footprint_radius := 0
+@export var slam_damage := 7
 
 var cell := Vector2i.ZERO
 var grid: HexGrid
 var inventory: Array[ItemData] = []
+var relics: Array[ItemData] = []
 var spells: Array[SpellData] = []
+var statuses: Array[StatusData] = []
 var spell_points := 2
 var weapon: ItemData
 var armor: ItemData
 
-var burn_turns := 0
-var burn_damage := 2
-var frozen_turns := 0
 var spawn_cooldown := 3
+var ability_cooldown := 2
+var telegraph_cells: Array[Vector2i] = []
 
 
 func _ready() -> void:
@@ -56,6 +60,30 @@ func move_to(target_cell: Vector2i, duration: float) -> Tween:
 	return tween
 
 
+## Returns all hex cells occupied by this actor (1 hex for normal actors, 7 hexes when footprint_radius == 1).
+func occupied_cells_at(center_cell: Vector2i) -> Array[Vector2i]:
+	if footprint_radius <= 0:
+		return [center_cell]
+	var result: Array[Vector2i] = []
+	for dq in range(-footprint_radius, footprint_radius + 1):
+		for dr in range(maxi(-footprint_radius, -dq - footprint_radius), mini(footprint_radius, -dq + footprint_radius) + 1):
+			result.append(center_cell + Vector2i(dq, dr))
+	return result
+
+
+func occupied_cells() -> Array[Vector2i]:
+	return occupied_cells_at(cell)
+
+
+func occupies_cell(target_cell: Vector2i) -> bool:
+	return HexGrid.distance(cell, target_cell) <= footprint_radius
+
+
+## Minimum hex distance from any hex occupied by this actor to `target_cell`.
+func distance_to_cell(target_cell: Vector2i) -> int:
+	return maxi(0, HexGrid.distance(cell, target_cell) - footprint_radius)
+
+
 func total_attack() -> int:
 	return stats.attack + (weapon.attack_bonus if weapon != null else 0)
 
@@ -63,6 +91,154 @@ func total_attack() -> int:
 func total_defense() -> int:
 	return stats.defense + (armor.defense_bonus if armor != null else 0)
 
+
+func total_spell_damage_bonus() -> int:
+	var bonus := 0
+	for r in relics:
+		bonus += r.spell_damage_bonus
+	return bonus
+
+
+func total_spell_range_bonus() -> int:
+	var bonus := 0
+	for r in relics:
+		bonus += r.spell_range_bonus
+	return bonus
+
+
+func total_burn_damage_bonus() -> int:
+	var bonus := 0
+	for r in relics:
+		bonus += r.burn_damage_bonus
+	return bonus
+
+
+func total_status_duration_bonus() -> int:
+	var bonus := 0
+	for r in relics:
+		bonus += r.status_duration_bonus
+	return bonus
+
+
+func total_afflicted_damage_bonus() -> int:
+	var bonus := 0
+	for r in relics:
+		bonus += r.afflicted_damage_bonus
+	return bonus
+
+
+func add_relic(relic: ItemData) -> void:
+	relics.append(relic)
+	if relic.attack_bonus > 0:
+		stats.attack += relic.attack_bonus
+	if relic.defense_bonus > 0:
+		stats.defense += relic.defense_bonus
+	if relic.max_hp_bonus > 0:
+		stats.max_hp += relic.max_hp_bonus
+		heal(relic.max_hp_bonus)
+
+
+func count_relic(effect: ItemData.RelicEffect) -> int:
+	var total := 0
+	for r in relics:
+		if r.relic_effect == effect:
+			total += 1
+	return total
+
+
+func has_relic(effect: ItemData.RelicEffect) -> bool:
+	return count_relic(effect) > 0
+
+
+# --- modular status system ------------------------------------------------
+
+func apply_status(template: StatusData, duration_override := -1, bonus_dot_damage := 0) -> void:
+	if template == null:
+		return
+	for cancel_id in template.cancels_status_ids:
+		remove_status(cancel_id)
+	var dur := duration_override if duration_override > 0 else template.default_duration
+	var existing := get_status(template.id)
+	if existing != null:
+		existing.turns_left = maxi(existing.turns_left, dur)
+		if template.damage_per_turn > 0 or bonus_dot_damage > 0:
+			existing.damage_per_turn = maxi(existing.damage_per_turn, template.damage_per_turn + bonus_dot_damage)
+	else:
+		statuses.append(template.init_runtime(dur, bonus_dot_damage))
+	queue_redraw()
+
+
+func get_status(status_id: String) -> StatusData:
+	for s in statuses:
+		if s.id == status_id:
+			return s
+	return null
+
+
+func has_status(status_id: String) -> bool:
+	return get_status(status_id) != null
+
+
+func has_any_status() -> bool:
+	return not statuses.is_empty()
+
+
+func remove_status(status_id: String) -> void:
+	for i in range(statuses.size() - 1, -1, -1):
+		if statuses[i].id == status_id:
+			statuses.remove_at(i)
+	queue_redraw()
+
+
+func skips_turn_from_status() -> bool:
+	for s in statuses:
+		if s.skips_turn:
+			return true
+	return false
+
+
+func tick_skip_turn_statuses() -> void:
+	for i in range(statuses.size() - 1, -1, -1):
+		if statuses[i].skips_turn:
+			statuses[i].turns_left -= 1
+			if statuses[i].turns_left <= 0:
+				statuses.remove_at(i)
+	queue_redraw()
+
+
+func blocks_regen_from_status() -> bool:
+	for s in statuses:
+		if s.blocks_regen:
+			return true
+	return false
+
+
+func incoming_damage_multiplier() -> float:
+	var mult := 1.0
+	for s in statuses:
+		mult *= s.incoming_damage_multiplier
+	return mult
+
+
+func consume_shatter_statuses() -> bool:
+	var shattered := false
+	for i in range(statuses.size() - 1, -1, -1):
+		if statuses[i].shatters_on_hit:
+			statuses.remove_at(i)
+			shattered = true
+	if shattered:
+		queue_redraw()
+	return shattered
+
+
+func describe_statuses() -> String:
+	var parts: Array[String] = []
+	for s in statuses:
+		parts.append(s.summary_text())
+	return ", ".join(parts)
+
+
+# --- combat & equipment ---------------------------------------------------
 
 func is_dead() -> bool:
 	return stats.hp <= 0
@@ -77,21 +253,6 @@ func take_damage(amount: int, flash_color := Color(1, 0.3, 0.3)) -> void:
 
 func heal(amount: int) -> void:
 	stats.hp = mini(stats.max_hp, stats.hp + amount)
-	queue_redraw()
-
-
-func apply_burn(turns: int, dmg := 2) -> void:
-	burn_turns = maxi(burn_turns, turns)
-	burn_damage = maxi(burn_damage, dmg)
-	if frozen_turns > 0:
-		frozen_turns = 0
-	queue_redraw()
-
-
-func apply_freeze(turns: int) -> void:
-	frozen_turns = maxi(frozen_turns, turns)
-	if burn_turns > 0:
-		burn_turns = 0
 	queue_redraw()
 
 
@@ -132,10 +293,25 @@ func equip(item: ItemData) -> void:
 func _draw() -> void:
 	var font := ThemeDB.fallback_font
 	var draw_col := color
-	if frozen_turns > 0:
-		draw_col = color.lerp(Color(0.35, 0.9, 1.0), 0.65)
-	elif burn_turns > 0:
-		draw_col = color.lerp(Color(1.0, 0.45, 0.1), 0.55)
+	if not statuses.is_empty():
+		draw_col = color.lerp(statuses[0].color, 0.6)
+
+	# Draw 7-hex armored boss footprint plates if footprint_radius > 0.
+	if footprint_radius > 0 and grid != null:
+		var plate_fill := Color(draw_col.r, draw_col.g, draw_col.b, 0.26)
+		var plate_border := Color(draw_col.r, draw_col.g, draw_col.b, 0.88)
+		var center_px := grid.cell_to_pixel(cell)
+		for occ in occupied_cells():
+			var rel_center := grid.cell_to_pixel(occ) - center_px
+			var poly := PackedVector2Array()
+			for i in 6:
+				var angle := deg_to_rad(60.0 * i - 30.0)
+				poly.append(rel_center + Vector2(cos(angle), sin(angle)) * (grid.hex_size * 0.92))
+			draw_colored_polygon(poly, plate_fill)
+			poly.append(poly[0])
+			draw_polyline(poly, plate_border, 2.2)
+			if occ != cell:
+				draw_circle(rel_center, 5.0, plate_border)
 
 	if is_spawner:
 		draw_arc(Vector2.ZERO, font_size * 0.58, 0.0, TAU, 24, Color(draw_col.r, draw_col.g, draw_col.b, 0.45), 2.0)
@@ -143,18 +319,20 @@ func _draw() -> void:
 	var offset := Vector2(-font_size, font_size * 0.35)
 	draw_string(font, offset, glyph, HORIZONTAL_ALIGNMENT_CENTER, font_size * 2.0, font_size, draw_col)
 
-	if frozen_turns > 0 or burn_turns > 0:
-		var badge := "*%d" % frozen_turns if frozen_turns > 0 else "~%d" % burn_turns
-		var badge_col := Color(0.4, 0.9, 1.0) if frozen_turns > 0 else Color(1.0, 0.5, 0.15)
-		draw_string(font, Vector2(-font_size, -font_size * 0.38), badge, HORIZONTAL_ALIGNMENT_CENTER, font_size * 2.0, 12, badge_col)
+	var badge_y := -font_size * 0.38 if footprint_radius == 0 else -font_size * 0.65
+	if not statuses.is_empty():
+		var badges: Array[String] = []
+		for s in statuses:
+			badges.append(s.badge_text())
+		draw_string(font, Vector2(-font_size, badge_y), " ".join(badges), HORIZONTAL_ALIGNMENT_CENTER, font_size * 2.0, 13, statuses[0].color)
 	elif is_spawner:
 		var timer_txt := "⏳%d" % spawn_cooldown if spawn_cooldown > 1 else "!"
-		draw_string(font, Vector2(-font_size, -font_size * 0.38), timer_txt, HORIZONTAL_ALIGNMENT_CENTER, font_size * 2.0, 12, Color(0.95, 0.65, 1.0))
+		draw_string(font, Vector2(-font_size, badge_y), timer_txt, HORIZONTAL_ALIGNMENT_CENTER, font_size * 2.0, 12, Color(0.95, 0.65, 1.0))
 
 	if stats != null and stats.hp < stats.max_hp and stats.hp > 0:
-		var bar_w := 24.0
-		var bar_h := 3.5
+		var bar_w := 64.0 if is_boss else 24.0
+		var bar_h := 5.0 if is_boss else 3.5
 		var ratio := clampf(float(stats.hp) / float(stats.max_hp), 0.0, 1.0)
 		var bar_pos := Vector2(-bar_w * 0.5, font_size * 0.48)
 		draw_rect(Rect2(bar_pos, Vector2(bar_w, bar_h)), Color(0.15, 0.05, 0.05, 0.85))
-		draw_rect(Rect2(bar_pos, Vector2(bar_w * ratio, bar_h)), Color(0.9, 0.25, 0.25, 0.95))
+		draw_rect(Rect2(bar_pos, Vector2(bar_w * ratio, bar_h)), Color(0.95, 0.2, 0.25, 0.95))

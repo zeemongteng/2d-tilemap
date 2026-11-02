@@ -11,10 +11,14 @@ const MAX_LOG_LINES := 6
 const SPELL_KEYS: Array[String] = ["Q", "W", "E", "F", "G", "C"]
 
 @onready var stats_label: Label = $Stats
+@onready var boss_panel: VBoxContainer = $BossPanel
+@onready var boss_title: Label = $BossPanel/BossTitle
+@onready var boss_hp_bar: ProgressBar = $BossPanel/BossHpBar
 @onready var cleared_banner: Label = $SpellPanel/ClearedBanner
 @onready var spell_list: VBoxContainer = $SpellPanel/SpellList
 @onready var spellbook_button: Button = $SpellPanel/SpellbookButton
 @onready var targeting_banner: Label = $SpellPanel/TargetingBanner
+@onready var relic_list: HFlowContainer = $InventoryPanel/RelicList
 @onready var inventory_list: VBoxContainer = $InventoryPanel/InventoryList
 @onready var log_label: Label = $Log
 @onready var spellbook_modal: PanelContainer = $SpellbookModal
@@ -56,6 +60,17 @@ func _ready() -> void:
 	info_popup.add_theme_stylebox_override("panel", style)
 	confirm_modal.add_theme_stylebox_override("panel", style)
 
+	var bar_bg := StyleBoxFlat.new()
+	bar_bg.bg_color = Color(0.14, 0.05, 0.07, 0.92)
+	bar_bg.border_color = Color(0.75, 0.25, 0.3, 0.9)
+	bar_bg.set_border_width_all(2)
+	bar_bg.set_corner_radius_all(4)
+	var bar_fill := StyleBoxFlat.new()
+	bar_fill.bg_color = Color(0.92, 0.2, 0.28, 0.95)
+	bar_fill.set_corner_radius_all(3)
+	boss_hp_bar.add_theme_stylebox_override("background", bar_bg)
+	boss_hp_bar.add_theme_stylebox_override("fill", bar_fill)
+
 
 func _process(_delta: float) -> void:
 	if info_popup.visible:
@@ -78,11 +93,17 @@ func is_any_modal_open() -> bool:
 	return spellbook_modal.visible or confirm_modal.visible
 
 
-func prompt_next_room(next_room_num: int, edge_cell: Vector2i) -> void:
+func prompt_next_room(next_room_num: int, edge_cell: Vector2i, is_boss_room := false) -> void:
 	_pending_edge_cell = edge_cell
 	hide_popup()
-	confirm_title.text = "ENTER ROOM %d?" % next_room_num
-	confirm_text.text = "You have reached the edge of the room.\nGenerate and enter Room %d in this direction?" % next_room_num
+	if is_boss_room:
+		confirm_title.text = "⚠ BOSS LAIR — ENTER ROOM %d? ⚠" % next_room_num
+		confirm_title.modulate = Color(1.0, 0.38, 0.38)
+		confirm_text.text = "Tremors shake the cavern beyond this doorway.\nA 7-hex Rift Colossus awaits in Room %d!" % next_room_num
+	else:
+		confirm_title.text = "ENTER ROOM %d?" % next_room_num
+		confirm_title.modulate = Color(0.45, 1.0, 0.6)
+		confirm_text.text = "You have reached the edge of the room.\nGenerate and enter Room %d in this direction?" % next_room_num
 	yes_button.text = "[Y / Enter] Enter Room %d" % next_room_num
 	confirm_modal.visible = true
 
@@ -126,12 +147,15 @@ func show_spell_popup(spell: SpellData, from_ui := true) -> void:
 	if spell == null:
 		return
 	_ui_hover_active = from_ui
+	var bonus_dmg := _last_player.total_spell_damage_bonus() if _last_player != null else 0
+	var bonus_rng := _last_player.total_spell_range_bonus() if _last_player != null else 0
+	var eff_rng := spell.effective_range() + (bonus_rng if spell.effective_range() > 0 else 0)
 	popup_title.text = "%s (Lv.%d/%d)" % [spell.display_name, spell.level, spell.max_level]
 	popup_title.modulate = spell.color.lerp(Color.WHITE, 0.35)
-	var range_part := "  •  Rng %d" % spell.effective_range() if spell.effective_range() > 0 else ""
+	var range_part := "  •  Rng %d" % eff_rng if eff_rng > 0 else ""
 	popup_subtitle.text = "%s  •  %s  •  %d DMG%s  •  %d/%d Charges" % [
 		spell.element_name(), spell.pattern_name(),
-		spell.effective_damage(), range_part,
+		spell.effective_damage() + bonus_dmg, range_part,
 		spell.charges, spell.effective_max_charges()
 	]
 	popup_body.text = spell.description
@@ -144,7 +168,8 @@ func show_actor_popup(actor: Actor) -> void:
 	if actor == null:
 		return
 	_ui_hover_active = false
-	popup_title.text = "%s %s" % [actor.glyph, actor.display_name.capitalize()]
+	var boss_tag := " [BOSS • 7-HEX]" if actor.is_boss else ""
+	popup_title.text = "%s %s%s" % [actor.glyph, actor.display_name.capitalize(), boss_tag]
 	popup_title.modulate = actor.color.lerp(Color.WHITE, 0.35)
 	if actor.is_spawner:
 		popup_subtitle.text = "HP %d/%d  •  DEF %d  •  Spawns in %d turn(s)" % [
@@ -155,7 +180,9 @@ func show_actor_popup(actor: Actor) -> void:
 		popup_subtitle.text = "HP %d/%d  •  ATK %d  •  DEF %d%s" % [
 			actor.stats.hp, actor.stats.max_hp, actor.total_attack(), actor.total_defense(), rng_str
 		]
-	popup_body.text = actor.description if not actor.description.is_empty() else "Hostile creature."
+	var status_info := "\nStatuses: %s" % actor.describe_statuses() if actor.has_any_status() else ""
+	var base_desc := actor.description if not actor.description.is_empty() else "Hostile creature."
+	popup_body.text = "%s%s" % [base_desc, status_info]
 	info_popup.reset_size()
 	info_popup.visible = true
 	_update_popup_position()
@@ -198,7 +225,7 @@ func post(message: String) -> void:
 	log_label.text = "\n".join(_lines)
 
 
-func refresh(player: Actor, turn: int, active_spell_idx := -1, room := 1, remaining_foes := 0, room_cleared := false) -> void:
+func refresh(player: Actor, turn: int, active_spell_idx := -1, room := 1, remaining_foes := 0, room_cleared := false, active_boss: Actor = null) -> void:
 	_last_player = player
 	_last_turn = turn
 	_active_spell_index = active_spell_idx
@@ -207,12 +234,7 @@ func refresh(player: Actor, turn: int, active_spell_idx := -1, room := 1, remain
 
 	var weapon := player.weapon.describe() if player.weapon != null else "none"
 	var armor := player.armor.describe() if player.armor != null else "none"
-	var status_parts: Array[String] = []
-	if player.frozen_turns > 0:
-		status_parts.append("FROZEN (%dt)" % player.frozen_turns)
-	if player.burn_turns > 0:
-		status_parts.append("BURNING (%dt)" % player.burn_turns)
-	var status_line := "\nStatus: " + ", ".join(status_parts) if not status_parts.is_empty() else ""
+	var status_line := "\nStatus: " + player.describe_statuses() if player.has_any_status() else ""
 
 	var room_status := "★ CLEARED ★" if room_cleared else "Foes: %d" % remaining_foes
 	stats_label.text = "Room %d (%s)  |  Turn %d  |  SP: %d\nHP %d/%d   ATK %d   DEF %d\nWeapon: %s\nArmor: %s%s" % [
@@ -222,10 +244,23 @@ func refresh(player: Actor, turn: int, active_spell_idx := -1, room := 1, remain
 		weapon, armor, status_line,
 	]
 
+	if active_boss != null and is_instance_valid(active_boss) and not active_boss.is_dead():
+		boss_panel.visible = true
+		var boss_status := "  [%s]" % active_boss.describe_statuses() if active_boss.has_any_status() else ""
+		boss_title.text = "%s %s — %d / %d HP%s" % [
+			active_boss.glyph, active_boss.display_name.to_upper(),
+			active_boss.stats.hp, active_boss.stats.max_hp, boss_status
+		]
+		boss_hp_bar.max_value = active_boss.stats.max_hp
+		boss_hp_bar.value = active_boss.stats.hp
+	else:
+		boss_panel.visible = false
+
 	cleared_banner.visible = room_cleared
 
 	spellbook_button.text = "[B] Grimoire / Upgrade Spells (%d SP)" % player.spell_points
 	_rebuild_spells(player, active_spell_idx)
+	_rebuild_relics(player)
 	_rebuild_inventory(player)
 	if spellbook_modal.visible:
 		_rebuild_spellbook(player)
@@ -235,6 +270,7 @@ func _rebuild_spells(player: Actor, active_spell_idx: int) -> void:
 	for child in spell_list.get_children():
 		child.queue_free()
 
+	var bonus_dmg := player.total_spell_damage_bonus()
 	for i in player.spells.size():
 		var spell := player.spells[i]
 		var key_label: String = SPELL_KEYS[i] if i < SPELL_KEYS.size() else str(i + 1)
@@ -242,7 +278,7 @@ func _rebuild_spells(player: Actor, active_spell_idx: int) -> void:
 		btn.focus_mode = Control.FOCUS_NONE
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		var active_prefix := ">> " if i == active_spell_idx else ""
-		btn.text = "%s%s  •  %d DMG" % [active_prefix, spell.describe_button(key_label), spell.effective_damage()]
+		btn.text = "%s%s  •  %d DMG" % [active_prefix, spell.describe_button(key_label), spell.effective_damage() + bonus_dmg]
 		if spell.charges <= 0:
 			btn.modulate = Color(0.55, 0.55, 0.55)
 		elif i == active_spell_idx:
@@ -268,6 +304,30 @@ func _rebuild_spells(player: Actor, active_spell_idx: int) -> void:
 		]
 	else:
 		targeting_banner.visible = false
+
+
+func _rebuild_relics(player: Actor) -> void:
+	for child in relic_list.get_children():
+		child.queue_free()
+
+	if player.relics.is_empty():
+		var none_lbl := Label.new()
+		none_lbl.text = "(None yet — look for ? on the floor)"
+		none_lbl.modulate = Color(0.65, 0.65, 0.65)
+		relic_list.add_child(none_lbl)
+		return
+
+	for relic in player.relics:
+		var badge := Button.new()
+		badge.focus_mode = Control.FOCUS_NONE
+		badge.text = "? %s" % relic.display_name
+		badge.modulate = relic.color.lerp(Color.WHITE, 0.4)
+		var rel := relic
+		badge.mouse_entered.connect(func() -> void:
+			show_item_popup(rel, true)
+		)
+		badge.mouse_exited.connect(hide_popup)
+		relic_list.add_child(badge)
 
 
 func _rebuild_inventory(player: Actor) -> void:

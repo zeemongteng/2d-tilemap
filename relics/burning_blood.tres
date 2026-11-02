@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Burning Blood"
+description = "Your blood burns with undying vigor. Heals 2 HP on every monster kill and 5 HP whenever a room is cleared."
+glyph = "?"
+color = Color(1, 0.35, 0.22, 1)
+type = 5
+relic_effect = 1
+

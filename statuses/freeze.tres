@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="StatusData" format=3]
+
+[ext_resource type="Script" path="res://status_data.gd" id="1_status"]
+
+[resource]
+script = ExtResource("1_status")
+id = "freeze"
+display_name = "Frozen"
+description = "Encased in ice. Skips its turn and shatters for +50% damage when hit."
+badge_glyph = "*"
+color = Color(0.38, 0.9, 1, 1)
+default_duration = 2
+skips_turn = true
+incoming_damage_multiplier = 1.5
+shatters_on_hit = true
+cancels_status_ids = PackedStringArray("burn")
+

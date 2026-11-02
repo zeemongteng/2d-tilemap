@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Storm Core"
+description = "Crackling tempest in a glass sphere. Entering a new room zaps a random foe for 7 DMG and restores +1 charge to all spells."
+glyph = "?"
+color = Color(0.35, 0.85, 1, 1)
+type = 5
+relic_effect = 4
+

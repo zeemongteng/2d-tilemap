@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Vajra Crystal"
+description = "A faceted thunderbolt stone of pure power. Permanently grants +2 ATK and +2 damage to all spells."
+glyph = "?"
+color = Color(1, 0.78, 0.2, 1)
+type = 5
+attack_bonus = 2
+spell_damage_bonus = 2
+relic_effect = 2
+

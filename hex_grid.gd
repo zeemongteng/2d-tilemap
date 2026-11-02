@@ -44,6 +44,7 @@ var path_preview: Array[Vector2i] = []
 var spell_range_cells: Array[Vector2i] = []
 var spell_aoe_cells: Array[Vector2i] = []
 var spell_preview_color := Color(1.0, 0.5, 0.2)
+var danger_cells: Array[Vector2i] = []
 
 var vfx_cells: Array[Vector2i] = []
 var vfx_arc_points: Array[Vector2] = []
@@ -230,8 +231,9 @@ func generate() -> void:
 
 ## Generates a room of `radius` centered at `center` while preserving any shared boundary tiles
 ## from already-generated adjacent rooms so walls and doorways connect seamlessly.
-func generate_room(center: Vector2i, entry_cell: Vector2i) -> void:
+func generate_room(center: Vector2i, entry_cell: Vector2i, is_boss_room := false) -> void:
 	current_room_center = center
+	danger_cells.clear()
 	if not generated_rooms.has(center):
 		generated_rooms.append(center)
 
@@ -269,8 +271,9 @@ func generate_room(center: Vector2i, entry_cell: Vector2i) -> void:
 			_tiles[c] = next[c]
 
 	# Guarantee open ground around the room's center and around the entry cell.
+	var open_center_radius := 5 if is_boss_room else 2
 	for c in region:
-		if distance(c, center) <= 2 and not locked.has(c):
+		if distance(c, center) <= open_center_radius and not locked.has(c):
 			_tiles[c] = false
 		if entry_cell != center and distance(c, entry_cell) <= 1 and distance(c, center) < radius and not locked.has(c):
 			_tiles[c] = false
@@ -403,6 +406,24 @@ func clear_spell_preview() -> void:
 	queue_redraw()
 
 
+func set_danger_cells(cells: Array[Vector2i]) -> void:
+	danger_cells = cells.duplicate()
+	queue_redraw()
+
+
+## Crushes interior cave walls within `r` of `center_cell` into walkable floor tiles.
+func crush_walls_in_radius(center_cell: Vector2i, r: int) -> bool:
+	var crushed := false
+	for c in cells_in_radius(center_cell, r, false):
+		if distance(c, current_room_center) < radius and _tiles.get(c, true):
+			_tiles[c] = false
+			crushed = true
+	if crushed:
+		_build_astar()
+		queue_redraw()
+	return crushed
+
+
 func play_spell_vfx(cells: Array[Vector2i], color: Color, arc_points: Array[Vector2] = []) -> Tween:
 	vfx_cells = cells.duplicate()
 	vfx_arc_points = arc_points.duplicate()
@@ -448,6 +469,20 @@ func _draw() -> void:
 		draw_colored_polygon(poly, exit_fill)
 		poly.append(poly[0])
 		draw_polyline(poly, exit_col, 2.0)
+
+	# Draw telegraphed boss Ground Slam danger hexes.
+	if not danger_cells.is_empty():
+		var danger_fill := Color(1.0, 0.15, 0.2, 0.32)
+		var danger_outline := Color(1.0, 0.25, 0.25, 0.95)
+		for c in danger_cells:
+			var center_px := cell_to_pixel(c)
+			var poly := _hex_polygon(center_px)
+			draw_colored_polygon(poly, danger_fill)
+			poly.append(poly[0])
+			draw_polyline(poly, danger_outline, 2.2)
+			var d := hex_size * 0.35
+			draw_line(center_px + Vector2(-d, -d), center_px + Vector2(d, d), danger_outline, 2.0)
+			draw_line(center_px + Vector2(-d, d), center_px + Vector2(d, -d), danger_outline, 2.0)
 
 	# Draw valid cast range cells when aiming a spell.
 	if not spell_range_cells.is_empty():

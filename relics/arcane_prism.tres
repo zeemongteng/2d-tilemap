@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Arcane Prism"
+description = "Refracts aether into boundless reach. Grants +1 Cast Range to spells and a 35% chance for spells to consume 0 charges."
+glyph = "?"
+color = Color(0.85, 0.45, 1, 1)
+type = 5
+spell_range_bonus = 1
+relic_effect = 5
+

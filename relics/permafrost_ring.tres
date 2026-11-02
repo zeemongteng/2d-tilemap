@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Permafrost Ring"
+description = "Biting rime-silver band. Extends all status durations by +1 turn and deals +3 bonus damage to foes with any status effect."
+glyph = "?"
+color = Color(0.42, 0.92, 1, 1)
+type = 5
+status_duration_bonus = 1
+afflicted_damage_bonus = 3
+relic_effect = 7
+

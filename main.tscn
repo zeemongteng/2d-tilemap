@@ -23,6 +23,14 @@
 [ext_resource type="PackedScene" path="res://monsters/fire_imp.tscn" id="21_imp"]
 [ext_resource type="PackedScene" path="res://monsters/troll.tscn" id="22_troll"]
 [ext_resource type="PackedScene" path="res://monsters/spawner.tscn" id="23_spawner"]
+[ext_resource type="PackedScene" path="res://monsters/rift_colossus.tscn" id="31_boss"]
+[ext_resource type="Resource" path="res://relics/burning_blood.tres" id="24_r_blood"]
+[ext_resource type="Resource" path="res://relics/vajra.tres" id="25_r_vajra"]
+[ext_resource type="Resource" path="res://relics/ancient_anchor.tres" id="26_r_anchor"]
+[ext_resource type="Resource" path="res://relics/storm_core.tres" id="27_r_storm"]
+[ext_resource type="Resource" path="res://relics/arcane_prism.tres" id="28_r_prism"]
+[ext_resource type="Resource" path="res://relics/cinder_heart.tres" id="29_r_cinder"]
+[ext_resource type="Resource" path="res://relics/permafrost_ring.tres" id="30_r_permafrost"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_game")
@@ -30,8 +38,10 @@ player_scene = ExtResource("3_player")
 monster_scene = ExtResource("4_goblin")
 monster_pool = Array[PackedScene]([ExtResource("4_goblin"), ExtResource("4_goblin"), ExtResource("20_skeleton"), ExtResource("21_imp"), ExtResource("22_troll")])
 spawner_scene = ExtResource("23_spawner")
+boss_scene = ExtResource("31_boss")
 world_item_scene = ExtResource("5_world_item")
 item_pool = Array[Resource]([ExtResource("7_sword"), ExtResource("8_axe"), ExtResource("9_leather"), ExtResource("10_mail"), ExtResource("11_potion"), ExtResource("12_mana"), ExtResource("12_mana"), ExtResource("13_orb")])
+relic_pool = Array[Resource]([ExtResource("24_r_blood"), ExtResource("25_r_vajra"), ExtResource("26_r_anchor"), ExtResource("27_r_storm"), ExtResource("28_r_prism"), ExtResource("29_r_cinder"), ExtResource("30_r_permafrost")])
 starting_items = Array[Resource]([ExtResource("12_mana"), ExtResource("11_potion")])
 starting_spells = Array[Resource]([ExtResource("14_fireball"), ExtResource("15_lightning"), ExtResource("16_icicle")])
 spell_catalog = Array[Resource]([ExtResource("14_fireball"), ExtResource("15_lightning"), ExtResource("16_icicle"), ExtResource("17_chain"), ExtResource("18_blink"), ExtResource("19_nova")])

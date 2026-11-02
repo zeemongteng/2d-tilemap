@@ -1,7 +1,17 @@
 class_name ItemData
 extends Resource
 
-enum Type { WEAPON, ARMOR, POTION, MANA_POTION, SPELL_ORB }
+enum Type { WEAPON, ARMOR, POTION, MANA_POTION, SPELL_ORB, RELIC }
+enum RelicEffect {
+	NONE,
+	BURNING_BLOOD,
+	VAJRA_CRYSTAL,
+	ANCIENT_ANCHOR,
+	STORM_CORE,
+	ARCANE_PRISM,
+	CINDER_HEART,
+	PERMAFROST_RING,
+}
 
 @export var display_name := "Item"
 @export_multiline var description := ""
@@ -10,9 +20,16 @@ enum Type { WEAPON, ARMOR, POTION, MANA_POTION, SPELL_ORB }
 @export var type := Type.POTION
 @export var attack_bonus := 0
 @export var defense_bonus := 0
+@export var max_hp_bonus := 0
+@export var spell_damage_bonus := 0
+@export var spell_range_bonus := 0
+@export var burn_damage_bonus := 0
+@export var status_duration_bonus := 0
+@export var afflicted_damage_bonus := 0
 @export var heal_amount := 0
 @export var charge_restore := 0
 @export var sp_amount := 0
+@export var relic_effect := RelicEffect.NONE
 
 
 func describe() -> String:
@@ -25,6 +42,8 @@ func describe() -> String:
 			return "%s (+%d spell charges)" % [display_name, charge_restore]
 		Type.SPELL_ORB:
 			return "%s (+%d SP)" % [display_name, sp_amount]
+		Type.RELIC:
+			return "? %s" % display_name
 		_:
 			return "%s (heals %d)" % [display_name, heal_amount]
 
@@ -39,6 +58,8 @@ func type_name() -> String:
 			return "Consumable  •  +%d Spell Charges" % charge_restore
 		Type.SPELL_ORB:
 			return "Artifact  •  +%d Spell Points" % sp_amount
+		Type.RELIC:
+			return "Rare Relic  •  Permanent Passive"
 		_:
 			return "Consumable  •  Restores %d HP" % heal_amount
 

@@ -13,6 +13,36 @@ offset_bottom = 168.0
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 4
 
+[node name="BossPanel" type="VBoxContainer" parent="."]
+visible = false
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -210.0
+offset_top = 10.0
+offset_right = 210.0
+offset_bottom = 68.0
+grow_horizontal = 2
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="BossTitle" type="Label" parent="BossPanel"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 0.35, 0.4, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 4
+text = "Ω THE RIFT COLOSSUS (48/48 HP)"
+horizontal_alignment = 1
+
+[node name="BossHpBar" type="ProgressBar" parent="BossPanel"]
+custom_minimum_size = Vector2(420, 18)
+layout_mode = 2
+mouse_filter = 2
+max_value = 48.0
+value = 48.0
+show_percentage = false
+
 [node name="SpellPanel" type="VBoxContainer" parent="."]
 offset_left = 12.0
 offset_top = 176.0
@@ -60,9 +90,21 @@ anchor_right = 1.0
 offset_left = -340.0
 offset_top = 8.0
 offset_right = -12.0
-offset_bottom = 420.0
+offset_bottom = 560.0
 grow_horizontal = 0
-theme_override_constants/separation = 4
+theme_override_constants/separation = 6
+
+[node name="RelicsHeader" type="Label" parent="InventoryPanel"]
+layout_mode = 2
+text = "Relics (hover for details)"
+theme_override_colors/font_color = Color(0.95, 0.82, 0.38, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 4
+
+[node name="RelicList" type="HFlowContainer" parent="InventoryPanel"]
+layout_mode = 2
+theme_override_constants/h_separation = 6
+theme_override_constants/v_separation = 4
 
 [node name="InventoryHeader" type="Label" parent="InventoryPanel"]
 layout_mode = 2

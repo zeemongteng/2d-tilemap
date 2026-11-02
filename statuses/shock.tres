@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="StatusData" format=3]
+
+[ext_resource type="Script" path="res://status_data.gd" id="1_status"]
+
+[resource]
+script = ExtResource("1_status")
+id = "shock"
+display_name = "Shocked"
+description = "Jolted by lightning. Takes 1 damage per turn and +25% bonus damage from attacks and spells."
+badge_glyph = "z"
+color = Color(1, 0.92, 0.28, 1)
+default_duration = 2
+damage_per_turn = 1
+incoming_damage_multiplier = 1.25
+

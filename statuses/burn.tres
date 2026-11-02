@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="StatusData" format=3]
+
+[ext_resource type="Script" path="res://status_data.gd" id="1_status"]
+
+[resource]
+script = ExtResource("1_status")
+id = "burn"
+display_name = "Burning"
+description = "Takes fire damage at the start of each turn and cannot regenerate HP."
+badge_glyph = "~"
+color = Color(1, 0.48, 0.14, 1)
+default_duration = 2
+damage_per_turn = 2
+blocks_regen = true
+cancels_status_ids = PackedStringArray("freeze")
+
