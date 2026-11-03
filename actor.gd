@@ -12,6 +12,7 @@ extends Node2D
 @export var loot_chance := 0.0
 
 @export_group("Monster Abilities")
+@export var is_allies := false
 @export var attack_range := 1
 @export var regen_per_turn := 0
 @export var is_spawner := false
@@ -34,6 +35,7 @@ var armor: ItemData
 var spawn_cooldown := 3
 var ability_cooldown := 2
 var telegraph_cells: Array[Vector2i] = []
+var holy_mantle_shield := false
 
 
 func _ready() -> void:
@@ -136,6 +138,16 @@ func add_relic(relic: ItemData) -> void:
 	if relic.max_hp_bonus > 0:
 		stats.max_hp += relic.max_hp_bonus
 		heal(relic.max_hp_bonus)
+	if relic.relic_effect == ItemData.RelicEffect.SACRED_HEART:
+		stats.hp = stats.max_hp
+	if relic.relic_effect == ItemData.RelicEffect.HOLY_MANTLE:
+		holy_mantle_shield = true
+	queue_redraw()
+
+
+func refresh_room_shields() -> void:
+	holy_mantle_shield = has_relic(ItemData.RelicEffect.HOLY_MANTLE)
+	queue_redraw()
 
 
 func count_relic(effect: ItemData.RelicEffect) -> int:
@@ -244,11 +256,18 @@ func is_dead() -> bool:
 	return stats.hp <= 0
 
 
-func take_damage(amount: int, flash_color := Color(1, 0.3, 0.3)) -> void:
+func take_damage(amount: int, flash_color := Color(1, 0.3, 0.3)) -> int:
+	if holy_mantle_shield and amount > 0:
+		holy_mantle_shield = false
+		modulate = Color(0.55, 0.95, 1.0)
+		create_tween().tween_property(self, "modulate", Color.WHITE, 0.3)
+		queue_redraw()
+		return 0
 	stats.hp = maxi(0, stats.hp - amount)
 	modulate = flash_color
 	create_tween().tween_property(self, "modulate", Color.WHITE, 0.25)
 	queue_redraw()
+	return amount
 
 
 func heal(amount: int) -> void:
@@ -315,6 +334,10 @@ func _draw() -> void:
 
 	if is_spawner:
 		draw_arc(Vector2.ZERO, font_size * 0.58, 0.0, TAU, 24, Color(draw_col.r, draw_col.g, draw_col.b, 0.45), 2.0)
+	elif is_allies and glyph != "@":
+		draw_arc(Vector2.ZERO, font_size * 0.52, 0.0, TAU, 20, Color(0.3, 0.95, 0.65, 0.55), 2.0)
+	if holy_mantle_shield:
+		draw_arc(Vector2.ZERO, font_size * 0.62, 0.0, TAU, 24, Color(0.55, 0.92, 1.0, 0.85), 2.2)
 
 	var offset := Vector2(-font_size, font_size * 0.35)
 	draw_string(font, offset, glyph, HORIZONTAL_ALIGNMENT_CENTER, font_size * 2.0, font_size, draw_col)
@@ -334,5 +357,6 @@ func _draw() -> void:
 		var bar_h := 5.0 if is_boss else 3.5
 		var ratio := clampf(float(stats.hp) / float(stats.max_hp), 0.0, 1.0)
 		var bar_pos := Vector2(-bar_w * 0.5, font_size * 0.48)
+		var fill_col := Color(0.25, 0.92, 0.55, 0.95) if is_allies else Color(0.95, 0.2, 0.25, 0.95)
 		draw_rect(Rect2(bar_pos, Vector2(bar_w, bar_h)), Color(0.15, 0.05, 0.05, 0.85))
-		draw_rect(Rect2(bar_pos, Vector2(bar_w * ratio, bar_h)), Color(0.95, 0.2, 0.25, 0.95))
+		draw_rect(Rect2(bar_pos, Vector2(bar_w * ratio, bar_h)), fill_col)

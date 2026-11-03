@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="SpellData" format=3]
+
+[ext_resource type="Script" path="res://spell_data.gd" id="1_spell"]
+[ext_resource type="Resource" path="res://statuses/burn.tres" id="2_burn"]
+
+[resource]
+script = ExtResource("1_spell")
+display_name = "Brimstone"
+description = "Fires a devastating blood-laser beam across the room, scorching every foe in a line for massive fire damage and 3 turns of Burn."
+element = 0
+pattern = 2
+color = Color(0.95, 0.15, 0.25, 1)
+max_charges = 4
+cast_range = 8
+damage = 11
+status_effect = ExtResource("2_burn")
+status_duration = 3
+learn_cost = 3
+upgrade_cost = 2
+bonus_damage_per_level = 4
+bonus_charges_per_level = 1
+bonus_range_per_level = 1
+

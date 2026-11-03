@@ -1,6 +1,6 @@
 extends Node2D
 ## Turn loop: every player action (a step, an attack, casting a spell, using an item, waiting)
-## is followed by one action from each monster. Clicking a far hex auto-walks
+## is followed by one action from each monster and ally. Clicking a far hex auto-walks
 ## one step per turn.
 
 const STEP_TIME := 0.08
@@ -15,6 +15,8 @@ const SPELL_HOTKEYS: Array[Key] = [KEY_Q, KEY_W, KEY_E, KEY_F, KEY_G, KEY_C]
 @export var world_item_scene: PackedScene
 @export var item_pool: Array[Resource]
 @export var relic_pool: Array[Resource]
+@export var devil_pool: Array[Resource]
+@export var angel_pool: Array[Resource]
 @export var starting_items: Array[Resource]
 @export var starting_spells: Array[Resource]
 @export var spell_catalog: Array[Resource]
@@ -32,6 +34,10 @@ var monsters: Array[Actor] = []
 var items: Array[WorldItem] = []
 var turn := 0
 var room_level := 1
+var _room_turns := 0
+var _room_par_turns := 18
+var _room_damage_taken := 0
+var _return_room_cell := Vector2i.ZERO
 var _room_cleared := false
 var _kills := 0
 var _busy := false
@@ -55,8 +61,14 @@ func _ready() -> void:
 	hud.spell_learn_requested.connect(_on_spell_learn_requested)
 	hud.spell_upgrade_requested.connect(_on_spell_upgrade_requested)
 	hud.next_room_confirmed.connect(_on_next_room_confirmed)
+	hud.debug_action_requested.connect(_on_debug_action_requested)
+	hud.debug_spawn_monster_requested.connect(_on_debug_spawn_monster_requested)
+	hud.debug_spawn_item_requested.connect(_on_debug_spawn_item_requested)
+	hud.debug_spawn_spell_requested.connect(_on_debug_spawn_spell_requested)
+	_init_debug_catalog()
 
 	player = _spawn_actor(player_scene, Vector2i.ZERO)
+	player.is_allies = true
 	for res in starting_items:
 		if res is ItemData:
 			player.inventory.append(res as ItemData)
@@ -65,7 +77,7 @@ func _ready() -> void:
 			player.learn_spell(res as SpellData)
 
 	_populate_current_room(Vector2i.ZERO)
-	hud.post("Clear all foes, then walk to any green edge passage to enter the next room!")
+	hud.post("Clear within Par turns for a Devil Deal (ψ) or take 0 hits for an Angel Room (†)!")
 	_refresh_hud()
 
 
@@ -81,14 +93,26 @@ static func _is_boss_room(room_num: int) -> bool:
 
 func _active_boss() -> Actor:
 	for m in monsters:
-		if m.is_boss and not m.is_dead():
+		if m.is_boss and not m.is_allies and not m.is_dead():
 			return m
 	return null
 
 
+func _hostile_count() -> int:
+	var count := 0
+	for m in monsters:
+		if not m.is_allies and not m.is_dead():
+			count += 1
+	return count
+
+
 func _populate_current_room(entry_cell: Vector2i) -> void:
 	_room_cleared = false
+	_room_turns = 0
+	_room_damage_taken = 0
+	_room_par_turns = 16 + room_level * 2 + (4 if _is_boss_room(room_level) else 0)
 	_active_spell_index = -1
+	player.refresh_room_shields()
 	grid.set_room_cleared(false)
 	grid.clear_spell_preview()
 	grid.set_danger_cells([])
@@ -153,17 +177,26 @@ func _on_next_room_confirmed(edge_cell: Vector2i) -> void:
 		await player.move_to(step_in, STEP_TIME).finished
 		_pickup()
 
+	# Bring surviving allies along into the new room near the player!
+	for m in monsters:
+		if m.is_allies and not m.is_dead():
+			for cand in grid.cells_in_radius(player.cell, 2, true):
+				if grid.is_in_current_room(cand) and not _is_occupied(cand):
+					m.place(grid, cand)
+					break
+
 	_populate_current_room(player.cell)
 	if boss_room:
 		hud.post("⚠ BOSS LAIR (Room %d)! The 7-hex Rift Colossus awakens!" % room_level)
 	else:
-		hud.post("Entered Room %d! %d foes await." % [room_level, monsters.size()])
+		hud.post("Entered Room %d! %d foes await (Par: %d turns)." % [room_level, _hostile_count(), _room_par_turns])
 
 	# Storm Core Relic effect on entering a new room:
 	var storm_count := player.count_relic(ItemData.RelicEffect.STORM_CORE)
-	if storm_count > 0 and not monsters.is_empty():
+	var hostiles := _hostile_actors()
+	if storm_count > 0 and not hostiles.is_empty():
 		player.restore_all_spells(storm_count)
-		var target := monsters[_rng.randi_range(0, monsters.size() - 1)]
+		var target := hostiles[_rng.randi_range(0, hostiles.size() - 1)]
 		var zap_dmg := 7 * storm_count
 		var arc: Array[Vector2] = [grid.cell_to_pixel(player.cell), grid.cell_to_pixel(target.cell)]
 		grid.play_spell_vfx([target.cell], Color(0.35, 0.85, 1.0), arc)
@@ -180,7 +213,7 @@ func _on_next_room_confirmed(edge_cell: Vector2i) -> void:
 
 
 func _check_edge_trigger() -> bool:
-	if not grid.is_unvisited_edge_cell(player.cell):
+	if grid.in_sanctuary or not grid.is_unvisited_edge_cell(player.cell):
 		return false
 	if not _room_cleared:
 		hud.post("The passage out of this room is sealed until all monsters are defeated!")
@@ -188,6 +221,140 @@ func _check_edge_trigger() -> bool:
 	var next_room := room_level + 1
 	hud.prompt_next_room(next_room, player.cell, _is_boss_room(next_room))
 	return true
+
+
+# --- Devil & Angel Sanctuary Rooms ----------------------------------------
+
+func _spawn_deal_portals(earned_devil: bool, earned_angel: bool) -> void:
+	var candidates := grid.cells_in_radius(player.cell, 3, true)
+	var open_cells: Array[Vector2i] = []
+	for c in candidates:
+		if c != player.cell and grid.distance(c, grid.current_room_center) < grid.radius and not _is_occupied(c) and _item_at(c) == null:
+			open_cells.append(c)
+
+	if earned_devil and not open_cells.is_empty():
+		var dcell: Vector2i = open_cells.pop_front()
+		var dportal := ItemData.new()
+		dportal.display_name = "Devil Room Portal"
+		dportal.description = "Earned by clearing the room within Par turns (%d/%d)!\nStep inside to trade Max HP for dark Devil Relics & Spells." % [_room_turns, _room_par_turns]
+		dportal.glyph = "ψ"
+		dportal.color = Color(1.0, 0.22, 0.28)
+		dportal.type = ItemData.Type.DEVIL_PORTAL
+		_spawn_item(dportal, dcell)
+		grid.play_spell_vfx([dcell], dportal.color)
+
+	if earned_angel and not open_cells.is_empty():
+		var acell: Vector2i = open_cells.pop_front()
+		var aportal := ItemData.new()
+		aportal.display_name = "Angel Room Portal"
+		aportal.description = "Earned by clearing the room Flawlessly (0 HP damage taken)!\nStep inside to claim 1 free Angel Blessing (the others will vanish)."
+		aportal.glyph = "†"
+		aportal.color = Color(1.0, 0.94, 0.52)
+		aportal.type = ItemData.Type.ANGEL_PORTAL
+		_spawn_item(aportal, acell)
+		grid.play_spell_vfx([acell], aportal.color)
+
+
+func _enter_sanctuary(is_angel: bool) -> void:
+	_return_room_cell = player.cell
+	# Remove any remaining Devil/Angel portals in the current room so only 1 sanctuary is entered.
+	for i in range(items.size() - 1, -1, -1):
+		if items[i].data.type in [ItemData.Type.DEVIL_PORTAL, ItemData.Type.ANGEL_PORTAL]:
+			items[i].queue_free()
+			items.remove_at(i)
+
+	var sanct_center := Vector2i(0, -100 - room_level * 20 - (10 if is_angel else 0))
+	grid.generate_sanctuary_room(sanct_center, 5, is_angel)
+	player.place(grid, sanct_center + Vector2i(0, 2))
+
+	var ret_data := ItemData.new()
+	ret_data.display_name = "Return Portal"
+	ret_data.description = "Step onto this portal to teleport back to Room %d." % room_level
+	ret_data.glyph = "O"
+	ret_data.color = Color(0.45, 0.95, 0.75)
+	ret_data.type = ItemData.Type.RETURN_PORTAL
+	_spawn_item(ret_data, sanct_center + Vector2i(0, 3))
+
+	var pedestal_cells: Array[Vector2i] = [
+		sanct_center + Vector2i(-2, 0),
+		sanct_center + Vector2i(0, -2),
+		sanct_center + Vector2i(2, -2),
+	]
+	var offers := _build_sanctuary_offers(is_angel, pedestal_cells.size())
+	for i in mini(offers.size(), pedestal_cells.size()):
+		_spawn_item(offers[i], pedestal_cells[i], true, is_angel)
+
+	grid.play_spell_vfx([player.cell], Color(1.0, 0.94, 0.52) if is_angel else Color(1.0, 0.22, 0.28))
+	if is_angel:
+		hud.post("† Entered the ANGEL SANCTUARY! Choose 1 free blessing — the other pedestals will vanish.")
+	else:
+		hud.post("ψ Entered the DEVIL CHAMBER! Walk onto any pedestal to trade Max HP for dark power.")
+	_refresh_hud()
+	_refresh_hover()
+
+
+func _exit_sanctuary() -> void:
+	grid.exit_sanctuary_room()
+	player.place(grid, _return_room_cell)
+	grid.play_spell_vfx([player.cell], Color(0.45, 0.95, 0.75))
+	hud.post("Returned to Room %d. Walk to any green edge passage when ready!" % room_level)
+	_refresh_hud()
+	_refresh_hover()
+
+
+func _build_sanctuary_offers(is_angel: bool, count: int) -> Array[ItemData]:
+	var pool := angel_pool if is_angel else devil_pool
+	var candidates: Array[ItemData] = []
+
+	for res in pool:
+		if res is ItemData:
+			var it := (res as ItemData).duplicate() as ItemData
+			if it.type == ItemData.Type.RELIC and player.has_relic(it.relic_effect):
+				continue
+			if not is_angel and it.hp_cost <= 0:
+				it.hp_cost = 4
+			elif is_angel:
+				it.hp_cost = 0
+			candidates.append(it)
+		elif res is SpellData:
+			var sp := res as SpellData
+			var learned := player.get_learned_spell(sp.display_name)
+			if learned != null and not learned.can_upgrade():
+				continue
+			var ped := ItemData.new()
+			ped.type = ItemData.Type.SPELL_PEDESTAL
+			ped.display_name = sp.display_name if learned == null else "%s (Upgrade)" % sp.display_name
+			ped.description = sp.describe_details()
+			ped.glyph = "★"
+			ped.color = sp.color
+			ped.granted_spell = sp
+			ped.hp_cost = 0 if is_angel else 6
+			candidates.append(ped)
+
+	# Pad with unowned general relics if needed so there are always 3 offers.
+	for res in relic_pool:
+		if candidates.size() >= count + 2:
+			break
+		if res is ItemData:
+			var rel := (res as ItemData).duplicate() as ItemData
+			if not player.has_relic(rel.relic_effect):
+				rel.hp_cost = 0 if is_angel else 4
+				candidates.append(rel)
+
+	var chosen: Array[ItemData] = []
+	while chosen.size() < count and not candidates.is_empty():
+		var idx := _rng.randi_range(0, candidates.size() - 1)
+		chosen.append(candidates[idx])
+		candidates.remove_at(idx)
+	return chosen
+
+
+func _clear_remaining_angel_pedestals() -> void:
+	for i in range(items.size() - 1, -1, -1):
+		if items[i].is_pedestal and items[i].is_angel_pedestal:
+			grid.play_spell_vfx([items[i].cell], Color(1.0, 0.95, 0.6))
+			items[i].queue_free()
+			items.remove_at(i)
 
 
 func _spawn_actor(scene: PackedScene, cell: Vector2i) -> Actor:
@@ -203,13 +370,13 @@ func _random_monster_scene() -> PackedScene:
 	return monster_pool[_rng.randi_range(0, monster_pool.size() - 1)]
 
 
-func _spawn_item(data: ItemData, cell: Vector2i) -> void:
+func _spawn_item(data: ItemData, cell: Vector2i, pedestal := false, angel_pedestal := false) -> void:
 	if data == null:
 		return
 	var item := world_item_scene.instantiate() as WorldItem
 	grid.add_child(item)
 	grid.move_child(item, 0) # draw under actors
-	item.setup(data, grid, cell)
+	item.setup(data, grid, cell, pedestal, angel_pedestal)
 	items.append(item)
 
 
@@ -234,7 +401,18 @@ func _random_relic() -> ItemData:
 
 
 func _refresh_hud() -> void:
-	hud.refresh(player, turn, _active_spell_index, room_level, monsters.size(), _room_cleared, _active_boss())
+	hud.refresh(
+		player,
+		turn,
+		_active_spell_index,
+		room_level,
+		_hostile_count(),
+		_room_cleared,
+		_active_boss(),
+		_room_turns,
+		_room_par_turns,
+		_room_damage_taken == 0
+	)
 
 
 # --- lookups --------------------------------------------------------------
@@ -248,6 +426,14 @@ func _monster_at(cell: Vector2i) -> Actor:
 		if m.occupies_cell(cell):
 			return m
 	return null
+
+
+func _hostile_actors() -> Array[Actor]:
+	var result: Array[Actor] = []
+	for m in monsters:
+		if not m.is_allies and not m.is_dead():
+			result.append(m)
+	return result
 
 
 func _item_at(cell: Vector2i) -> WorldItem:
@@ -269,7 +455,7 @@ func _monster_cells(exclude_actor: Actor = null) -> Array[Vector2i]:
 
 func _monster_adjacent() -> bool:
 	for m in monsters:
-		if m.distance_to_cell(player.cell) == 1:
+		if not m.is_allies and m.distance_to_cell(player.cell) == 1:
 			return true
 	return false
 
@@ -292,10 +478,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode in [KEY_F1, KEY_QUOTELEFT]:
+			hud.toggle_debug_menu()
+			return
 		if event.keycode == KEY_B:
 			hud.toggle_spellbook()
 			return
 		if event.keycode == KEY_ESCAPE:
+			if hud.is_debug_open():
+				hud.close_debug_menu()
+				return
 			if hud.is_spellbook_open():
 				hud.close_spellbook()
 				return
@@ -323,7 +515,10 @@ func _unhandled_input(event: InputEvent) -> void:
 				return
 			var target := _monster_at(cell)
 			if target != null and target.distance_to_cell(player.cell) == 1:
-				_attack_turn(target)
+				if target.is_allies and target.footprint_radius == 0:
+					_swap_with_ally(target)
+				elif not target.is_allies:
+					_attack_turn(target)
 				return
 			var path := _path_to(cell)
 			if not path.is_empty():
@@ -345,7 +540,8 @@ func _unhandled_input(event: InputEvent) -> void:
 func _path_to(cell: Vector2i) -> Array[Vector2i]:
 	var target := _monster_at(cell)
 	var blocked := _monster_cells(target)
-	var path := grid.find_path(player.cell, cell, blocked, not _room_cleared)
+	var restrict := (not _room_cleared) or grid.in_sanctuary
+	var path := grid.find_path(player.cell, cell, blocked, restrict)
 	if target != null and not path.is_empty():
 		while not path.is_empty() and target.occupies_cell(path[path.size() - 1]):
 			path.pop_back()
@@ -430,6 +626,233 @@ func _on_spell_upgrade_requested(spell: SpellData) -> void:
 	_refresh_hud()
 
 
+# --- Debug Spawner & Sandbox Menu -----------------------------------------
+
+func _init_debug_catalog() -> void:
+	var monster_entries: Array[Dictionary] = []
+	var seen_paths: Array[String] = []
+	var candidate_scenes: Array[PackedScene] = []
+	if monster_scene != null:
+		candidate_scenes.append(monster_scene)
+	for sc in monster_pool:
+		if sc != null:
+			candidate_scenes.append(sc)
+	if spawner_scene != null:
+		candidate_scenes.append(spawner_scene)
+	if boss_scene != null:
+		candidate_scenes.append(boss_scene)
+	for sp_res in spell_catalog:
+		if sp_res is SpellData and (sp_res as SpellData).summon_scene != null:
+			candidate_scenes.append((sp_res as SpellData).summon_scene)
+
+	for sc in candidate_scenes:
+		if seen_paths.has(sc.resource_path):
+			continue
+		seen_paths.append(sc.resource_path)
+		var temp := sc.instantiate() as Actor
+		if temp != null:
+			var label_suffix := " (7-Hex Boss)" if temp.is_boss else (" (Spawner)" if temp.is_spawner else "")
+			monster_entries.append({
+				"scene": sc,
+				"name": temp.display_name.capitalize() + label_suffix,
+				"glyph": temp.glyph,
+				"color": temp.color,
+			})
+			temp.free()
+
+	var all_relics: Array[ItemData] = []
+	var all_items: Array[ItemData] = []
+	var all_spells: Array[SpellData] = []
+	var seen_names: Array[String] = []
+
+	for res in relic_pool + devil_pool + angel_pool:
+		if res is ItemData and (res as ItemData).type == ItemData.Type.RELIC:
+			var it := res as ItemData
+			if not seen_names.has(it.display_name):
+				seen_names.append(it.display_name)
+				all_relics.append(it)
+
+	for res in item_pool:
+		if res is ItemData:
+			var it := res as ItemData
+			if not seen_names.has(it.display_name):
+				seen_names.append(it.display_name)
+				all_items.append(it)
+
+	for res in spell_catalog + devil_pool + angel_pool:
+		if res is SpellData:
+			var sp := res as SpellData
+			if not seen_names.has(sp.display_name):
+				seen_names.append(sp.display_name)
+				all_spells.append(sp)
+
+	hud.setup_debug_catalog(monster_entries, all_relics, all_items, all_spells)
+
+
+func _find_open_debug_cell(footprint := 0, avoid_items := false) -> Vector2i:
+	for rad in range(1, grid.radius + 1):
+		var ring := grid.cells_in_radius(player.cell, rad, true)
+		for c in ring:
+			if c == player.cell:
+				continue
+			if not grid.is_in_current_room(c):
+				continue
+			if avoid_items and _item_at(c) != null:
+				continue
+			if footprint > 0:
+				var fits := true
+				for fcell in grid.cells_in_radius(c, footprint, false):
+					if not grid.is_in_current_room(fcell) or _is_occupied(fcell):
+						fits = false
+						break
+				if fits:
+					return c
+			elif not _is_occupied(c):
+				return c
+	return player.cell
+
+
+func _on_debug_action_requested(action: String) -> void:
+	if _dead:
+		return
+	match action:
+		"heal_full":
+			player.stats.hp = player.stats.max_hp
+			player.recharge_all_spells()
+			player.refresh_room_shields()
+			grid.play_spell_vfx([player.cell], Color(0.45, 1.0, 0.6))
+			hud.post("[Debug] Restored full HP, recharged all spells, and refreshed shields!")
+		"add_sp":
+			player.spell_points += 5
+			hud.post("[Debug] Added +5 Spell Points (SP)!")
+		"kill_all":
+			var hostiles := _hostile_actors()
+			for h in hostiles:
+				grid.play_spell_vfx(h.occupied_cells(), Color(1.0, 0.35, 0.3))
+				monsters.erase(h)
+				h.queue_free()
+			grid.set_danger_cells([])
+			hud.post("[Debug] Slain %d hostile creature(s)!" % hostiles.size())
+			_check_room_cleared()
+		"spawn_devil_portal":
+			_spawn_deal_portals(true, false)
+			hud.post("[Debug] Spawned a Devil Room Portal (ψ) nearby!")
+		"spawn_angel_portal":
+			_spawn_deal_portals(false, true)
+			hud.post("[Debug] Spawned an Angel Room Portal (†) nearby!")
+		"enter_devil_room":
+			hud.close_debug_menu()
+			if grid.in_sanctuary:
+				_exit_sanctuary()
+			_enter_sanctuary(false)
+			return
+		"enter_angel_room":
+			hud.close_debug_menu()
+			if grid.in_sanctuary:
+				_exit_sanctuary()
+			_enter_sanctuary(true)
+			return
+		"exit_sanctuary":
+			if grid.in_sanctuary:
+				hud.close_debug_menu()
+				_exit_sanctuary()
+				return
+			else:
+				hud.post("[Debug] You are not currently inside a Sanctuary room.")
+	_refresh_hud()
+
+
+func _on_debug_spawn_monster_requested(scene: PackedScene, as_ally: bool) -> void:
+	if _dead or scene == null:
+		return
+	var temp := scene.instantiate() as Actor
+	var fp := temp.footprint_radius if temp != null else 0
+	if temp != null:
+		temp.free()
+	var cell := _find_open_debug_cell(fp, false)
+	if cell == player.cell:
+		hud.post("[Debug] No open space nearby to spawn that unit!")
+		return
+	if fp > 0:
+		grid.crush_walls_in_radius(cell, fp)
+	var unit := _spawn_actor(scene, cell)
+	if unit.is_spawner and unit.spawn_scene == null:
+		unit.spawn_scene = _random_monster_scene()
+	if as_ally:
+		unit.is_allies = true
+		unit.color = unit.color.lerp(Color(0.35, 0.95, 1.0), 0.55)
+		unit.queue_redraw()
+	else:
+		_room_cleared = false
+		grid.set_room_cleared(false)
+	monsters.append(unit)
+	grid.play_spell_vfx(unit.occupied_cells(), Color(0.4, 0.95, 1.0) if as_ally else Color(1.0, 0.35, 0.35))
+	hud.post("[Debug] Spawned %s %s at %s!" % ["Ally" if as_ally else "Enemy", unit.display_name, str(cell)])
+	_refresh_hud()
+
+
+func _on_debug_spawn_item_requested(item: ItemData, grant_directly: bool) -> void:
+	if _dead or item == null:
+		return
+	var copy := item.duplicate() as ItemData
+	copy.hp_cost = 0
+	if grant_directly:
+		match copy.type:
+			ItemData.Type.RELIC:
+				player.add_relic(copy)
+				hud.post("[Debug] Granted Relic: %s!" % copy.display_name)
+			ItemData.Type.SPELL_ORB:
+				player.spell_points += copy.power
+				hud.post("[Debug] Granted +%d Spell Points!" % copy.power)
+			ItemData.Type.WEAPON:
+				player.weapon = copy
+				hud.post("[Debug] Equipped %s!" % copy.describe())
+			ItemData.Type.ARMOR:
+				player.armor = copy
+				hud.post("[Debug] Equipped %s!" % copy.describe())
+			_:
+				if player.inventory.size() < MAX_INVENTORY:
+					player.inventory.append(copy)
+					hud.post("[Debug] Added %s to inventory!" % copy.display_name)
+				else:
+					hud.post("[Debug] Inventory full — spawned %s on floor instead!" % copy.display_name)
+					var cell_fallback := _find_open_debug_cell(0, true)
+					_spawn_item(copy, cell_fallback)
+	else:
+		var cell := _find_open_debug_cell(0, true)
+		_spawn_item(copy, cell)
+		grid.play_spell_vfx([cell], copy.color)
+		hud.post("[Debug] Spawned %s on floor at %s!" % [copy.display_name, str(cell)])
+	_refresh_hud()
+
+
+func _on_debug_spawn_spell_requested(spell: SpellData, grant_directly: bool) -> void:
+	if _dead or spell == null:
+		return
+	if grant_directly:
+		var existing := player.get_learned_spell(spell.display_name)
+		if existing != null and existing.can_upgrade():
+			existing.upgrade()
+			hud.post("[Debug] Upgraded %s to Lv.%d!" % [existing.display_name, existing.level])
+		else:
+			var learned := player.learn_spell(spell)
+			hud.post("[Debug] Learned %s (Lv.%d)!" % [learned.display_name, learned.level])
+	else:
+		var cell := _find_open_debug_cell(0, true)
+		var ped := ItemData.new()
+		ped.type = ItemData.Type.SPELL_PEDESTAL
+		ped.display_name = spell.display_name
+		ped.description = spell.describe_details()
+		ped.glyph = "★"
+		ped.color = spell.color
+		ped.granted_spell = spell
+		ped.hp_cost = 0
+		_spawn_item(ped, cell, true, false)
+		grid.play_spell_vfx([cell], spell.color)
+		hud.post("[Debug] Spawned %s pedestal at %s!" % [spell.display_name, str(cell)])
+	_refresh_hud()
+
+
 # --- spell targeting & casting --------------------------------------------
 
 func _valid_spell_targets(spell: SpellData) -> Array[Vector2i]:
@@ -441,11 +864,11 @@ func _valid_spell_targets(spell: SpellData) -> Array[Vector2i]:
 	for c in candidates:
 		if c == player.cell:
 			continue
-		if not _room_cleared and not grid.is_in_current_room(c):
+		if (not _room_cleared or grid.in_sanctuary) and not grid.is_in_current_room(c):
 			continue
 		if spell.requires_los and not grid.has_line_of_sight(player.cell, c):
 			continue
-		if spell.pattern == SpellData.Pattern.BLINK and _is_occupied(c):
+		if spell.pattern in [SpellData.Pattern.BLINK, SpellData.Pattern.SUMMON] and _is_occupied(c):
 			continue
 		valid.append(c)
 	return valid
@@ -453,7 +876,7 @@ func _valid_spell_targets(spell: SpellData) -> Array[Vector2i]:
 
 func _compute_spell_aoe(spell: SpellData, target_cell: Vector2i) -> Array[Vector2i]:
 	match spell.pattern:
-		SpellData.Pattern.SINGLE:
+		SpellData.Pattern.SINGLE, SpellData.Pattern.SUMMON:
 			return [target_cell]
 		SpellData.Pattern.BLAST:
 			return grid.cells_in_radius(target_cell, spell.effective_radius(), true)
@@ -476,14 +899,14 @@ func _compute_chain_cells(start_cell: Vector2i, jump_range: int, max_jumps: int)
 	var current := start_cell
 	var hit_actors: Array[Actor] = []
 	var first_m := _monster_at(start_cell)
-	if first_m != null:
+	if first_m != null and not first_m.is_allies:
 		hit_actors.append(first_m)
 	for _i in max_jumps:
 		var best_cell := current
 		var best_dist := 999
 		var best_m: Actor = null
 		for m in monsters:
-			if hit_actors.has(m):
+			if m.is_allies or hit_actors.has(m):
 				continue
 			var d := m.distance_to_cell(current)
 			if d <= jump_range and d < best_dist:
@@ -504,7 +927,7 @@ func _try_cast_active_spell(target_cell: Vector2i) -> void:
 	var spell := player.spells[_active_spell_index]
 	var valid_targets := _valid_spell_targets(spell)
 	if spell.pattern != SpellData.Pattern.NOVA and not valid_targets.has(target_cell):
-		hud.post("Out of range or blocked line of sight.")
+		hud.post("Invalid target (out of range, occupied, or blocked line of sight).")
 		return
 	_cast_spell(spell, target_cell)
 
@@ -534,12 +957,29 @@ func _cast_spell(spell: SpellData, target_cell: Vector2i) -> void:
 
 	var vfx_tween := grid.play_spell_vfx(aoe_cells, spell.color, arc_points)
 
+	if spell.pattern == SpellData.Pattern.SUMMON:
+		var sum_scene := spell.summon_scene if spell.summon_scene != null else monster_scene
+		var ally := _spawn_actor(sum_scene, target_cell)
+		ally.is_allies = true
+		ally.stats.max_hp += (spell.level - 1) * spell.bonus_summon_hp_per_level
+		ally.stats.hp = ally.stats.max_hp
+		ally.stats.attack += (spell.level - 1) * spell.bonus_summon_atk_per_level + player.total_spell_damage_bonus()
+		ally.queue_redraw()
+		monsters.append(ally)
+		hud.post("You cast %s, summoning %s (HP %d, ATK %d)!%s" % [
+			spell.display_name, ally.display_name.to_lower(),
+			ally.stats.max_hp, ally.total_attack(), free_note
+		])
+		await vfx_tween.finished
+		await _advance_turn()
+		return
+
 	var hit_names: Array[String] = []
 	var hit_monsters: Array[Actor] = []
 	var overlap_counts: Dictionary = {}
 	for c in aoe_cells:
 		var m := _monster_at(c)
-		if m != null:
+		if m != null and not m.is_allies:
 			if not hit_monsters.has(m):
 				hit_monsters.append(m)
 				overlap_counts[m] = 1
@@ -597,6 +1037,18 @@ func _attack_turn(target: Actor) -> void:
 	await _advance_turn()
 
 
+func _swap_with_ally(ally: Actor) -> void:
+	_busy = true
+	var old_player_cell := player.cell
+	var ally_cell := ally.cell
+	ally.move_to(old_player_cell, STEP_TIME)
+	await player.move_to(ally_cell, STEP_TIME).finished
+	_pickup()
+	hud.post("You swap places with %s." % ally.display_name.to_lower())
+	await _advance_turn()
+	_check_edge_trigger()
+
+
 func _use_item(index: int) -> void:
 	if index < 0 or index >= player.inventory.size():
 		return
@@ -635,13 +1087,15 @@ func _walk(path: Array[Vector2i]) -> void:
 	for i in path.size():
 		if _dead or _cancel_walk or _is_occupied(path[i]):
 			break
-		# Like Qud, stop auto-walking once something hostile is next to you.
 		if i > 0 and _monster_adjacent():
 			break
 		await player.move_to(path[i], STEP_TIME).finished
 		var picked_up := _pickup()
-		await _monsters_act()
-		turn += 1
+		if not grid.in_sanctuary:
+			await _monsters_act()
+			turn += 1
+			if not _room_cleared:
+				_room_turns += 1
 		_refresh_hud()
 		if _check_edge_trigger() or picked_up:
 			break
@@ -649,8 +1103,11 @@ func _walk(path: Array[Vector2i]) -> void:
 
 
 func _advance_turn() -> void:
-	await _monsters_act()
-	turn += 1
+	if not grid.in_sanctuary:
+		await _monsters_act()
+		turn += 1
+		if not _room_cleared:
+			_room_turns += 1
 	_finish_action()
 
 
@@ -666,6 +1123,43 @@ func _pickup() -> bool:
 	var item := _item_at(player.cell)
 	if item == null:
 		return false
+	if item.data.type == ItemData.Type.DEVIL_PORTAL:
+		_enter_sanctuary(false)
+		return true
+	if item.data.type == ItemData.Type.ANGEL_PORTAL:
+		_enter_sanctuary(true)
+		return true
+	if item.data.type == ItemData.Type.RETURN_PORTAL:
+		items.erase(item)
+		item.queue_free()
+		_exit_sanctuary()
+		return true
+	if item.is_pedestal:
+		if item.data.hp_cost > 0:
+			if player.stats.max_hp <= item.data.hp_cost:
+				hud.post("You need more than %d Max HP to sign this Devil Pact!" % item.data.hp_cost)
+				return true
+			player.stats.max_hp -= item.data.hp_cost
+			player.stats.hp = mini(player.stats.hp, player.stats.max_hp)
+		var is_angel_choice := item.is_angel_pedestal
+		var cost_note := " (-%d Max HP)" % item.data.hp_cost if item.data.hp_cost > 0 else " (Angel Blessing)"
+		if item.data.type == ItemData.Type.SPELL_PEDESTAL and item.data.granted_spell != null:
+			var existing := player.get_learned_spell(item.data.granted_spell.display_name)
+			if existing != null and existing.can_upgrade():
+				existing.upgrade()
+				hud.post("★ PACT SPELL UPGRADED: %s Lv.%d%s!" % [existing.display_name, existing.level, cost_note])
+			else:
+				var learned := player.learn_spell(item.data.granted_spell)
+				hud.post("★ PACT SPELL LEARNED: %s%s!" % [learned.display_name, cost_note])
+		else:
+			player.add_relic(item.data)
+			hud.post("★ PACT RELIC ACQUIRED: %s%s! %s" % [item.data.display_name, cost_note, item.data.description])
+		grid.play_spell_vfx([player.cell], item.data.color)
+		items.erase(item)
+		item.queue_free()
+		if is_angel_choice:
+			_clear_remaining_angel_pedestals()
+		return true
 	if item.data.type == ItemData.Type.RELIC:
 		player.add_relic(item.data)
 		items.erase(item)
@@ -691,19 +1185,31 @@ func _pickup() -> bool:
 
 # --- combat & room clear --------------------------------------------------
 
+func _apply_damage_to_actor(defender: Actor, amount: int, color := Color(1, 0.3, 0.3)) -> int:
+	var actual := defender.take_damage(amount, color)
+	if defender == player:
+		if actual == 0 and amount > 0:
+			hud.post("🛡 Holy Mantle blocks the hit!")
+		else:
+			_room_damage_taken += actual
+	return actual
+
+
 func _attack(attacker: Actor, defender: Actor) -> void:
 	var damage := maxi(1, attacker.total_attack() - defender.total_defense() + _rng.randi_range(-1, 1))
 	if attacker == player and defender.has_any_status():
 		damage += player.total_afflicted_damage_bonus()
 	damage = int(ceil(float(damage) * defender.incoming_damage_multiplier()))
 	var shattered := defender.consume_shatter_statuses()
-	defender.take_damage(damage)
+	var dealt := _apply_damage_to_actor(defender, damage)
+	if defender == player and dealt == 0:
+		return
 	var shatter_note := " (SHATTER!)" if shattered else ""
 	hud.post("%s %s %s for %d%s." % [
 		attacker.display_name,
 		"hit" if attacker == player else "hits",
 		defender.display_name.to_lower(),
-		damage,
+		dealt,
 		shatter_note,
 	])
 	if not defender.is_dead():
@@ -719,20 +1225,25 @@ func _handle_monster_death(defender: Actor) -> void:
 	if not monsters.has(defender):
 		return
 	monsters.erase(defender)
+	if defender.is_allies:
+		hud.post("%s falls in battle!" % defender.display_name)
+		defender.queue_free()
+		return
+
 	if defender.is_boss:
 		defender.telegraph_cells.clear()
 		grid.set_danger_cells([])
 	_kills += 1
 	var sp_gain := 3 if defender.is_boss else (1 if (defender.is_spawner or _kills % 2 == 0) else 0)
 	player.spell_points += sp_gain
-	var blood_stacks := player.count_relic(ItemData.RelicEffect.BURNING_BLOOD)
-	if blood_stacks > 0:
-		player.heal(2 * blood_stacks)
+	var blood_heal := 2 * player.count_relic(ItemData.RelicEffect.BURNING_BLOOD) + 3 * player.count_relic(ItemData.RelicEffect.VAMPIRIC_MAW)
+	if blood_heal > 0:
+		player.heal(blood_heal)
 	var bonus_notes: Array[String] = []
 	if sp_gain > 0:
 		bonus_notes.append("+%d SP" % sp_gain)
-	if blood_stacks > 0:
-		bonus_notes.append("+%d HP" % (2 * blood_stacks))
+	if blood_heal > 0:
+		bonus_notes.append("+%d HP" % blood_heal)
 	var note_str := " (%s)" % ", ".join(bonus_notes) if not bonus_notes.is_empty() else ""
 
 	if defender.is_boss:
@@ -759,7 +1270,7 @@ func _handle_monster_death(defender: Actor) -> void:
 
 
 func _check_room_cleared() -> void:
-	if _room_cleared or _dead or not monsters.is_empty():
+	if _room_cleared or _dead or _hostile_count() > 0:
 		return
 	_room_cleared = true
 	grid.set_room_cleared(true)
@@ -770,11 +1281,39 @@ func _check_room_cleared() -> void:
 	if blood_stacks > 0:
 		player.heal(5 * blood_stacks)
 	grid.play_spell_vfx(grid.cells_in_radius(player.cell, 2, true), Color(0.35, 0.95, 0.55))
-	hud.post("★ ROOM %d CLEARED! (+2 SP, +1 spell charge). Walk to any glowing green edge passage to enter the next room!" % room_level)
+
+	var earned_devil := (_room_turns <= _room_par_turns)
+	var earned_angel := (_room_damage_taken == 0)
+	_spawn_deal_portals(earned_devil, earned_angel)
+
+	var deal_notes: Array[String] = []
+	if earned_devil:
+		deal_notes.append("ψ Devil Portal (Speed Clear %d/%dt)" % [_room_turns, _room_par_turns])
+	if earned_angel:
+		deal_notes.append("† Angel Portal (Flawless Clear)")
+	var portal_msg := " Opened: %s!" % " & ".join(deal_notes) if not deal_notes.is_empty() else ""
+	hud.post("★ ROOM %d CLEARED! (+2 SP, +1 spell charge).%s" % [room_level, portal_msg])
 	_check_edge_trigger()
 
 
-# --- monster, spawner & boss turns ----------------------------------------
+# --- monster, ally, spawner & boss turns ----------------------------------
+
+func _nearest_enemy_for(actor: Actor) -> Actor:
+	var best: Actor = null
+	var best_dist := 999
+	if not actor.is_allies:
+		best = player
+		best_dist = actor.distance_to_cell(player.cell)
+	for other in monsters:
+		if other == actor or not is_instance_valid(other) or other.is_dead():
+			continue
+		if other.is_allies != actor.is_allies:
+			var d := other.distance_to_cell(actor.cell)
+			if d < best_dist:
+				best_dist = d
+				best = other
+	return best
+
 
 func _monsters_act() -> void:
 	if _process_actor_statuses(player):
@@ -791,6 +1330,11 @@ func _monsters_act() -> void:
 			continue
 		if m.regen_per_turn > 0 and not m.blocks_regen_from_status() and m.stats.hp < m.stats.max_hp:
 			m.heal(m.regen_per_turn)
+		if m.is_allies:
+			var ally_tween := _ally_act(m)
+			if ally_tween != null:
+				tween = ally_tween
+			continue
 		if m.is_boss:
 			var boss_tween := _boss_act(m)
 			if boss_tween != null:
@@ -801,24 +1345,50 @@ func _monsters_act() -> void:
 		if m.is_spawner:
 			_spawner_act(m)
 			continue
-		var dist := m.distance_to_cell(player.cell)
+		var target := _nearest_enemy_for(m)
+		if target == null:
+			continue
+		var dist := m.distance_to_cell(target.cell)
 		if dist == 1:
-			_attack(m, player)
+			_attack(m, target)
 			if _dead:
 				break
 			continue
-		if m.attack_range > 1 and dist <= m.attack_range and grid.has_line_of_sight(m.cell, player.cell):
-			_ranged_monster_attack(m, player)
+		if m.attack_range > 1 and dist <= m.attack_range and grid.has_line_of_sight(m.cell, target.cell):
+			_ranged_monster_attack(m, target)
 			if _dead:
 				break
 			continue
-		var next := _monster_step(m)
+		var next := _monster_step_toward(m, target)
 		if next != m.cell:
 			tween = m.move_to(next, STEP_TIME)
 	if tween != null:
 		await tween.finished
 	else:
 		await get_tree().create_timer(STEP_TIME).timeout
+
+
+func _ally_act(ally: Actor) -> Tween:
+	var target := _nearest_enemy_for(ally)
+	if target != null:
+		var dist := target.distance_to_cell(ally.cell)
+		if dist == 1:
+			_attack(ally, target)
+			return null
+		if ally.attack_range > 1 and dist <= ally.attack_range and grid.has_line_of_sight(ally.cell, target.cell):
+			_ranged_monster_attack(ally, target)
+			return null
+		var next := _monster_step_toward(ally, target, true)
+		if next != ally.cell:
+			return ally.move_to(next, STEP_TIME)
+		return null
+	if HexGrid.distance(ally.cell, player.cell) > 2:
+		var blocked := _monster_cells(ally)
+		blocked.append(player.cell)
+		var path := grid.find_path(ally.cell, player.cell, blocked, false)
+		if not path.is_empty() and not _is_occupied(path[0]):
+			return ally.move_to(path[0], STEP_TIME)
+	return null
 
 
 func _boss_act(boss: Actor) -> Tween:
@@ -828,14 +1398,24 @@ func _boss_act(boss: Actor) -> Tween:
 		boss.telegraph_cells.clear()
 		grid.set_danger_cells([])
 		grid.play_spell_vfx(slam_cells, Color(1.0, 0.25, 0.2))
+		var hit_any := false
 		if slam_cells.has(player.cell):
+			hit_any = true
 			var dmg := maxi(1, boss.slam_damage - player.total_defense())
-			player.take_damage(dmg, Color(1.0, 0.25, 0.2))
-			hud.post("💥 %s's Ground Slam crushes you for %d!" % [boss.display_name, dmg])
+			var dealt := _apply_damage_to_actor(player, dmg, Color(1.0, 0.25, 0.2))
+			if dealt > 0:
+				hud.post("💥 %s's Ground Slam crushes you for %d!" % [boss.display_name, dealt])
 			if player.is_dead():
 				_dead = true
 				hud.post("You are crushed by %s. Press R to start over." % boss.display_name.to_lower())
-		else:
+		for m in monsters.duplicate():
+			if is_instance_valid(m) and m.is_allies and not m.is_dead() and slam_cells.has(m.cell):
+				hit_any = true
+				var admg := maxi(1, boss.slam_damage - m.total_defense())
+				m.take_damage(admg, Color(1.0, 0.25, 0.2))
+				if m.is_dead():
+					_handle_monster_death(m)
+		if not hit_any:
 			hud.post("💥 %s's Ground Slam shatters the cave floor!" % boss.display_name)
 		return null
 
@@ -869,8 +1449,9 @@ func _boss_act(boss: Actor) -> Tween:
 		return null
 
 	# 4. Melee crush if adjacent to any of the boss's 7 hexes.
-	if dist_to_player <= 1:
-		_attack(boss, player)
+	var target := _nearest_enemy_for(boss)
+	if target != null and boss.distance_to_cell(target.cell) <= 1:
+		_attack(boss, target)
 		return null
 
 	# 5. March 1 step toward the player, crushing interior cave walls under its 7-hex body.
@@ -883,12 +1464,12 @@ func _boss_act(boss: Actor) -> Tween:
 		var new_footprint := boss.occupied_cells_at(cand)
 		if new_footprint.has(player.cell):
 			continue
-		var blocked_by_minion := false
+		var blocked_by_unit := false
 		for other in monsters:
 			if other != boss and new_footprint.has(other.cell):
-				blocked_by_minion = true
+				blocked_by_unit = true
 				break
-		if blocked_by_minion:
+		if blocked_by_unit:
 			continue
 		var cand_dist := HexGrid.distance(cand, player.cell)
 		if cand_dist < best_dist:
@@ -917,6 +1498,7 @@ func _spawner_act(spawner: Actor) -> void:
 	var spawn_cell := options[_rng.randi_range(0, options.size() - 1)]
 	var scene := spawner.spawn_scene if spawner.spawn_scene != null else _random_monster_scene()
 	var summoned := _spawn_actor(scene, spawn_cell)
+	summoned.is_allies = spawner.is_allies
 	monsters.append(summoned)
 	grid.play_spell_vfx([spawner.cell, spawn_cell], spawner.color)
 	hud.post("%s summons %s!" % [spawner.display_name, summoned.display_name.to_lower()])
@@ -926,11 +1508,16 @@ func _ranged_monster_attack(attacker: Actor, defender: Actor) -> void:
 	var arc: Array[Vector2] = [grid.cell_to_pixel(attacker.cell), grid.cell_to_pixel(defender.cell)]
 	grid.play_spell_vfx([defender.cell], attacker.color, arc)
 	var damage := maxi(1, attacker.total_attack() - defender.total_defense() + _rng.randi_range(-1, 1))
-	defender.take_damage(damage, attacker.color)
-	hud.post("%s blasts %s from afar for %d." % [attacker.display_name, defender.display_name.to_lower(), damage])
-	if defender.is_dead() and defender == player:
-		_dead = true
-		hud.post("You die. Press R to start over.")
+	var dealt := _apply_damage_to_actor(defender, damage, attacker.color)
+	if defender == player and dealt == 0:
+		return
+	hud.post("%s blasts %s from afar for %d." % [attacker.display_name, defender.display_name.to_lower(), dealt])
+	if defender.is_dead():
+		if defender == player:
+			_dead = true
+			hud.post("You die. Press R to start over.")
+		else:
+			_handle_monster_death(defender)
 
 
 func _process_actor_statuses(actor: Actor) -> bool:
@@ -942,8 +1529,9 @@ func _process_actor_statuses(actor: Actor) -> bool:
 			continue
 		st.turns_left -= 1
 		if st.damage_per_turn > 0:
-			actor.take_damage(st.damage_per_turn, st.color)
-			hud.post("%s takes %d %s damage." % [actor.display_name, st.damage_per_turn, st.display_name.to_lower()])
+			var dealt := _apply_damage_to_actor(actor, st.damage_per_turn, st.color)
+			if dealt > 0:
+				hud.post("%s takes %d %s damage." % [actor.display_name, dealt, st.display_name.to_lower()])
 		if st.turns_left <= 0:
 			actor.statuses.remove_at(i)
 		actor.queue_redraw()
@@ -957,11 +1545,15 @@ func _process_actor_statuses(actor: Actor) -> bool:
 	return false
 
 
-func _monster_step(m: Actor) -> Vector2i:
-	if HexGrid.distance(m.cell, player.cell) <= monster_sight:
+func _monster_step_toward(m: Actor, target: Actor, always_chase := false) -> Vector2i:
+	if always_chase or HexGrid.distance(m.cell, target.cell) <= monster_sight:
 		var others := _monster_cells(m)
-		var path := grid.find_path(m.cell, player.cell, others, true)
-		if not path.is_empty():
+		for occ in target.occupied_cells():
+			others.erase(occ)
+		if target != player:
+			others.append(player.cell)
+		var path := grid.find_path(m.cell, target.cell, others, true)
+		if not path.is_empty() and not _is_occupied(path[0]):
 			return path[0]
 		return m.cell
 	if _rng.randf() < 0.5:

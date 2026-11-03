@@ -37,6 +37,10 @@ var current_room_center := Vector2i.ZERO
 var generated_rooms: Array[Vector2i] = []
 var exit_cells: Array[Vector2i] = []
 var room_cleared := false
+var in_sanctuary := false
+var active_sanctuary_center := Vector2i.ZERO
+var active_sanctuary_radius := 5
+var _sanctuary_themes: Dictionary = {}
 
 var hover_cell := Vector2i(1 << 20, 1 << 20)
 var path_preview: Array[Vector2i] = []
@@ -94,6 +98,8 @@ func is_walkable(cell: Vector2i) -> bool:
 
 
 func is_in_current_room(cell: Vector2i) -> bool:
+	if in_sanctuary:
+		return distance(cell, active_sanctuary_center) <= active_sanctuary_radius
 	return distance(cell, current_room_center) <= radius
 
 
@@ -225,8 +231,29 @@ func generate() -> void:
 	else:
 		_rng.randomize()
 	_tiles.clear()
+	_sanctuary_themes.clear()
+	in_sanctuary = false
 	generated_rooms.clear()
 	generate_room(Vector2i.ZERO, Vector2i.ZERO)
+
+
+func generate_sanctuary_room(center: Vector2i, sanct_radius: int, is_angel: bool) -> void:
+	in_sanctuary = true
+	active_sanctuary_center = center
+	active_sanctuary_radius = sanct_radius
+	var theme_key := "angel" if is_angel else "devil"
+	for dq in range(-sanct_radius, sanct_radius + 1):
+		for dr in range(maxi(-sanct_radius, -dq - sanct_radius), mini(sanct_radius, -dq + sanct_radius) + 1):
+			var c := center + Vector2i(dq, dr)
+			_tiles[c] = (distance(c, center) == sanct_radius)
+			_sanctuary_themes[c] = theme_key
+	_build_astar()
+	queue_redraw()
+
+
+func exit_sanctuary_room() -> void:
+	in_sanctuary = false
+	queue_redraw()
 
 
 ## Generates a room of `radius` centered at `center` while preserving any shared boundary tiles
@@ -455,11 +482,19 @@ func _draw() -> void:
 		var points := _hex_polygon(cell_to_pixel(c))
 		var in_active := is_in_current_room(c)
 		var base_col := wall_color if _tiles[c] else floor_color
+		var cur_line := line_color
+		if _sanctuary_themes.has(c):
+			if _sanctuary_themes[c] == "devil":
+				base_col = Color("160609") if _tiles[c] else Color("2b0d14")
+				cur_line = Color("701e2e")
+			else:
+				base_col = Color("101b24") if _tiles[c] else Color("1f3345")
+				cur_line = Color("78b5db")
 		if not in_active:
 			base_col = base_col.darkened(0.28)
 		draw_colored_polygon(points, base_col)
 		points.append(points[0])
-		draw_polyline(points, line_color.darkened(0.25) if not in_active else line_color, 1.0)
+		draw_polyline(points, cur_line.darkened(0.25) if not in_active else cur_line, 1.0)
 
 	# Highlight exit doorway hexes on the outer rim of the current room.
 	var exit_col := exit_ready_color if room_cleared else exit_locked_color

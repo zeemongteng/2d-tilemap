@@ -75,6 +75,12 @@ layout_mode = 2
 focus_mode = 0
 text = "[B] Open Spellbook (2 SP)"
 
+[node name="DebugButton" type="Button" parent="SpellPanel"]
+layout_mode = 2
+focus_mode = 0
+theme_override_colors/font_color = Color(0.75, 0.9, 1, 1)
+text = "[F1 / `] Debug Menu"
+
 [node name="TargetingBanner" type="Label" parent="SpellPanel"]
 visible = false
 layout_mode = 2
@@ -230,6 +236,54 @@ custom_minimum_size = Vector2(140, 36)
 layout_mode = 2
 focus_mode = 0
 text = "[N / Esc] Stay Here"
+
+[node name="DebugModal" type="PanelContainer" parent="."]
+visible = false
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -350.0
+offset_top = -260.0
+offset_right = 350.0
+offset_bottom = 260.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Margin" type="MarginContainer" parent="DebugModal"]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 14
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 14
+
+[node name="VBox" type="VBoxContainer" parent="DebugModal/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="TopBar" type="HBoxContainer" parent="DebugModal/Margin/VBox"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="DebugModal/Margin/VBox/TopBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.55, 0.88, 1, 1)
+text = "DEBUG SPAWNER & SANDBOX MENU"
+
+[node name="CloseDebugButton" type="Button" parent="DebugModal/Margin/VBox/TopBar"]
+layout_mode = 2
+focus_mode = 0
+text = "Close [F1 / ` / Esc]"
+
+[node name="Scroll" type="ScrollContainer" parent="DebugModal/Margin/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="DebugList" type="VBoxContainer" parent="DebugModal/Margin/VBox/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
 
 [node name="InfoPopup" type="PanelContainer" parent="."]
 visible = false

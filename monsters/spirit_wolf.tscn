@@ -1,0 +1,20 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://actor.gd" id="1_actor"]
+[ext_resource type="Script" path="res://stats.gd" id="2_stats"]
+
+[sub_resource type="Resource" id="Resource_stats"]
+script = ExtResource("2_stats")
+max_hp = 10
+attack = 4
+defense = 1
+
+[node name="SpiritWolf" type="Node2D"]
+script = ExtResource("1_actor")
+display_name = "The spirit wolf"
+description = "Loyal astral hound conjured from pure aether (is_allies = true). Hunts down hostile monsters."
+glyph = "w"
+color = Color(0.35, 0.98, 0.72, 1)
+stats = SubResource("Resource_stats")
+is_allies = true
+

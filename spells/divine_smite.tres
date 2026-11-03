@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="SpellData" format=3]
+
+[ext_resource type="Script" path="res://spell_data.gd" id="1_spell"]
+[ext_resource type="Resource" path="res://statuses/shock.tres" id="2_shock"]
+
+[resource]
+script = ExtResource("1_spell")
+display_name = "Divine Smite"
+description = "Calls down a pillar of celestial judgment that blasts a 7-hex area for heavy damage and shocks all struck foes."
+element = 1
+pattern = 1
+color = Color(1, 0.96, 0.55, 1)
+max_charges = 5
+cast_range = 6
+radius = 1
+damage = 9
+status_effect = ExtResource("2_shock")
+status_duration = 2
+learn_cost = 3
+upgrade_cost = 2
+bonus_damage_per_level = 3
+bonus_charges_per_level = 2
+bonus_range_per_level = 1
+

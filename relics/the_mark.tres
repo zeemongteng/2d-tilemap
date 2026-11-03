@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "The Mark"
+description = "Dark sigil of the abyss. Permanently grants +3 ATK, +3 Spell Damage, and +1 Cast Range."
+glyph = "?"
+color = Color(0.95, 0.2, 0.25, 1)
+type = 5
+attack_bonus = 3
+spell_damage_bonus = 3
+spell_range_bonus = 1
+hp_cost = 4
+relic_effect = 8
+

@@ -19,6 +19,7 @@
 [ext_resource type="Resource" path="res://spells/chain_lightning.tres" id="17_chain"]
 [ext_resource type="Resource" path="res://spells/void_blink.tres" id="18_blink"]
 [ext_resource type="Resource" path="res://spells/arcane_nova.tres" id="19_nova"]
+[ext_resource type="Resource" path="res://spells/summon_wolf.tres" id="32_wolf_spell"]
 [ext_resource type="PackedScene" path="res://monsters/skeleton.tscn" id="20_skeleton"]
 [ext_resource type="PackedScene" path="res://monsters/fire_imp.tscn" id="21_imp"]
 [ext_resource type="PackedScene" path="res://monsters/troll.tscn" id="22_troll"]
@@ -31,6 +32,12 @@
 [ext_resource type="Resource" path="res://relics/arcane_prism.tres" id="28_r_prism"]
 [ext_resource type="Resource" path="res://relics/cinder_heart.tres" id="29_r_cinder"]
 [ext_resource type="Resource" path="res://relics/permafrost_ring.tres" id="30_r_permafrost"]
+[ext_resource type="Resource" path="res://spells/brimstone.tres" id="33_brimstone"]
+[ext_resource type="Resource" path="res://spells/divine_smite.tres" id="34_divine_smite"]
+[ext_resource type="Resource" path="res://relics/the_mark.tres" id="35_the_mark"]
+[ext_resource type="Resource" path="res://relics/vampiric_maw.tres" id="36_vampiric_maw"]
+[ext_resource type="Resource" path="res://relics/sacred_heart.tres" id="37_sacred_heart"]
+[ext_resource type="Resource" path="res://relics/holy_mantle.tres" id="38_holy_mantle"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_game")
@@ -42,9 +49,11 @@ boss_scene = ExtResource("31_boss")
 world_item_scene = ExtResource("5_world_item")
 item_pool = Array[Resource]([ExtResource("7_sword"), ExtResource("8_axe"), ExtResource("9_leather"), ExtResource("10_mail"), ExtResource("11_potion"), ExtResource("12_mana"), ExtResource("12_mana"), ExtResource("13_orb")])
 relic_pool = Array[Resource]([ExtResource("24_r_blood"), ExtResource("25_r_vajra"), ExtResource("26_r_anchor"), ExtResource("27_r_storm"), ExtResource("28_r_prism"), ExtResource("29_r_cinder"), ExtResource("30_r_permafrost")])
+devil_pool = Array[Resource]([ExtResource("35_the_mark"), ExtResource("36_vampiric_maw"), ExtResource("33_brimstone")])
+angel_pool = Array[Resource]([ExtResource("37_sacred_heart"), ExtResource("38_holy_mantle"), ExtResource("34_divine_smite")])
 starting_items = Array[Resource]([ExtResource("12_mana"), ExtResource("11_potion")])
-starting_spells = Array[Resource]([ExtResource("14_fireball"), ExtResource("15_lightning"), ExtResource("16_icicle")])
-spell_catalog = Array[Resource]([ExtResource("14_fireball"), ExtResource("15_lightning"), ExtResource("16_icicle"), ExtResource("17_chain"), ExtResource("18_blink"), ExtResource("19_nova")])
+starting_spells = Array[Resource]([ExtResource("14_fireball"), ExtResource("15_lightning"), ExtResource("16_icicle"), ExtResource("32_wolf_spell")])
+spell_catalog = Array[Resource]([ExtResource("14_fireball"), ExtResource("15_lightning"), ExtResource("16_icicle"), ExtResource("32_wolf_spell"), ExtResource("17_chain"), ExtResource("18_blink"), ExtResource("19_nova")])
 
 [node name="HexGrid" type="Node2D" parent="."]
 script = ExtResource("2_grid")

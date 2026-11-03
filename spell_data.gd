@@ -1,9 +1,9 @@
 class_name SpellData
 extends Resource
-## Rift Wizard-style spell resource with charges, elemental types, AoE patterns, and SP upgrades.
+## Rift Wizard-style spell resource with charges, elemental types, AoE patterns, summoning, and SP upgrades.
 
 enum Element { FIRE, LIGHTNING, ICE, ARCANE }
-enum Pattern { SINGLE, BLAST, BEAM, CHAIN, BLINK, NOVA }
+enum Pattern { SINGLE, BLAST, BEAM, CHAIN, BLINK, NOVA, SUMMON }
 
 @export var display_name := "Spell"
 @export_multiline var description := ""
@@ -19,6 +19,7 @@ enum Pattern { SINGLE, BLAST, BEAM, CHAIN, BLINK, NOVA }
 @export var damage := 4
 @export var status_effect: StatusData
 @export var status_duration := 0
+@export var summon_scene: PackedScene
 @export var requires_los := true
 
 @export_group("Progression")
@@ -29,6 +30,8 @@ enum Pattern { SINGLE, BLAST, BEAM, CHAIN, BLINK, NOVA }
 @export var bonus_charges_per_level := 2
 @export var bonus_range_per_level := 1
 @export var bonus_radius_per_level := 0
+@export var bonus_summon_hp_per_level := 4
+@export var bonus_summon_atk_per_level := 1
 
 var charges := 5
 var level := 1
@@ -103,6 +106,8 @@ func pattern_name() -> String:
 			return "Teleport"
 		Pattern.NOVA:
 			return "Nova (r=%d)" % effective_radius()
+		Pattern.SUMMON:
+			return "Summon"
 	return "Spell"
 
 
@@ -115,8 +120,11 @@ func describe_button(hotkey: String) -> String:
 func describe_details() -> String:
 	var parts: Array[String] = [
 		"[%s | %s]" % [element_name(), pattern_name()],
-		"%d DMG" % effective_damage(),
 	]
+	if pattern == Pattern.SUMMON:
+		parts.append("Summons Ally")
+	elif effective_damage() > 0:
+		parts.append("%d DMG" % effective_damage())
 	if effective_range() > 0:
 		parts.append("Rng %d" % effective_range())
 	if status_effect != null and status_duration > 0:

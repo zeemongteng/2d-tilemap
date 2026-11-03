@@ -6,6 +6,10 @@ signal item_selected(index: int)
 signal spell_learn_requested(template: SpellData)
 signal spell_upgrade_requested(spell: SpellData)
 signal next_room_confirmed(edge_cell: Vector2i)
+signal debug_action_requested(action: String)
+signal debug_spawn_monster_requested(scene: PackedScene, as_ally: bool)
+signal debug_spawn_item_requested(item: ItemData, grant_directly: bool)
+signal debug_spawn_spell_requested(spell: SpellData, grant_directly: bool)
 
 const MAX_LOG_LINES := 6
 const SPELL_KEYS: Array[String] = ["Q", "W", "E", "F", "G", "C"]
@@ -17,6 +21,7 @@ const SPELL_KEYS: Array[String] = ["Q", "W", "E", "F", "G", "C"]
 @onready var cleared_banner: Label = $SpellPanel/ClearedBanner
 @onready var spell_list: VBoxContainer = $SpellPanel/SpellList
 @onready var spellbook_button: Button = $SpellPanel/SpellbookButton
+@onready var debug_button: Button = $SpellPanel/DebugButton
 @onready var targeting_banner: Label = $SpellPanel/TargetingBanner
 @onready var relic_list: HFlowContainer = $InventoryPanel/RelicList
 @onready var inventory_list: VBoxContainer = $InventoryPanel/InventoryList
@@ -32,6 +37,10 @@ const SPELL_KEYS: Array[String] = ["Q", "W", "E", "F", "G", "C"]
 @onready var yes_button: Button = $ConfirmRoomModal/Margin/VBox/Buttons/YesButton
 @onready var no_button: Button = $ConfirmRoomModal/Margin/VBox/Buttons/NoButton
 
+@onready var debug_modal: PanelContainer = $DebugModal
+@onready var close_debug_button: Button = $DebugModal/Margin/VBox/TopBar/CloseDebugButton
+@onready var debug_list: VBoxContainer = $DebugModal/Margin/VBox/Scroll/DebugList
+
 @onready var info_popup: PanelContainer = $InfoPopup
 @onready var popup_title: Label = $InfoPopup/Margin/VBox/PopupTitle
 @onready var popup_subtitle: Label = $InfoPopup/Margin/VBox/PopupSubtitle
@@ -39,6 +48,10 @@ const SPELL_KEYS: Array[String] = ["Q", "W", "E", "F", "G", "C"]
 
 var _lines := PackedStringArray()
 var _spell_catalog: Array[SpellData] = []
+var _debug_monsters: Array[Dictionary] = []
+var _debug_relics: Array[ItemData] = []
+var _debug_items: Array[ItemData] = []
+var _debug_spells: Array[SpellData] = []
 var _last_player: Actor
 var _last_turn := 0
 var _active_spell_index := -1
@@ -51,6 +64,8 @@ func _ready() -> void:
 	close_button.pressed.connect(close_spellbook)
 	yes_button.pressed.connect(confirm_next_room)
 	no_button.pressed.connect(close_confirm_modal)
+	debug_button.pressed.connect(toggle_debug_menu)
+	close_debug_button.pressed.connect(close_debug_menu)
 
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.08, 0.11, 0.1, 0.96)
@@ -59,6 +74,7 @@ func _ready() -> void:
 	style.set_corner_radius_all(6)
 	info_popup.add_theme_stylebox_override("panel", style)
 	confirm_modal.add_theme_stylebox_override("panel", style)
+	debug_modal.add_theme_stylebox_override("panel", style)
 
 	var bar_bg := StyleBoxFlat.new()
 	bar_bg.bg_color = Color(0.14, 0.05, 0.07, 0.92)
@@ -81,6 +97,18 @@ func set_spell_catalog(catalog: Array[SpellData]) -> void:
 	_spell_catalog = catalog
 
 
+func setup_debug_catalog(
+	monsters_info: Array[Dictionary],
+	relics: Array[ItemData],
+	items: Array[ItemData],
+	spells: Array[SpellData]
+) -> void:
+	_debug_monsters = monsters_info
+	_debug_relics = relics
+	_debug_items = items
+	_debug_spells = spells
+
+
 func is_spellbook_open() -> bool:
 	return spellbook_modal.visible
 
@@ -89,8 +117,12 @@ func is_confirm_open() -> bool:
 	return confirm_modal.visible
 
 
+func is_debug_open() -> bool:
+	return debug_modal.visible
+
+
 func is_any_modal_open() -> bool:
-	return spellbook_modal.visible or confirm_modal.visible
+	return spellbook_modal.visible or confirm_modal.visible or debug_modal.visible
 
 
 func prompt_next_room(next_room_num: int, edge_cell: Vector2i, is_boss_room := false) -> void:
@@ -120,6 +152,7 @@ func close_confirm_modal() -> void:
 
 
 func toggle_spellbook() -> void:
+	debug_modal.visible = false
 	spellbook_modal.visible = not spellbook_modal.visible
 	hide_popup()
 	if spellbook_modal.visible and _last_player != null:
@@ -128,6 +161,18 @@ func toggle_spellbook() -> void:
 
 func close_spellbook() -> void:
 	spellbook_modal.visible = false
+
+
+func toggle_debug_menu() -> void:
+	spellbook_modal.visible = false
+	debug_modal.visible = not debug_modal.visible
+	hide_popup()
+	if debug_modal.visible:
+		_rebuild_debug_menu()
+
+
+func close_debug_menu() -> void:
+	debug_modal.visible = false
 
 
 func show_item_popup(item: ItemData, from_ui := true) -> void:
@@ -153,9 +198,10 @@ func show_spell_popup(spell: SpellData, from_ui := true) -> void:
 	popup_title.text = "%s (Lv.%d/%d)" % [spell.display_name, spell.level, spell.max_level]
 	popup_title.modulate = spell.color.lerp(Color.WHITE, 0.35)
 	var range_part := "  •  Rng %d" % eff_rng if eff_rng > 0 else ""
-	popup_subtitle.text = "%s  •  %s  •  %d DMG%s  •  %d/%d Charges" % [
+	var dmg_part := "Summon Ally" if spell.pattern == SpellData.Pattern.SUMMON else "%d DMG" % (spell.effective_damage() + bonus_dmg)
+	popup_subtitle.text = "%s  •  %s  •  %s%s  •  %d/%d Charges" % [
 		spell.element_name(), spell.pattern_name(),
-		spell.effective_damage() + bonus_dmg, range_part,
+		dmg_part, range_part,
 		spell.charges, spell.effective_max_charges()
 	]
 	popup_body.text = spell.description
@@ -168,7 +214,7 @@ func show_actor_popup(actor: Actor) -> void:
 	if actor == null:
 		return
 	_ui_hover_active = false
-	var boss_tag := " [BOSS • 7-HEX]" if actor.is_boss else ""
+	var boss_tag := " [BOSS • 7-HEX]" if actor.is_boss else (" [ALLY]" if actor.is_allies else "")
 	popup_title.text = "%s %s%s" % [actor.glyph, actor.display_name.capitalize(), boss_tag]
 	popup_title.modulate = actor.color.lerp(Color.WHITE, 0.35)
 	if actor.is_spawner:
@@ -225,7 +271,18 @@ func post(message: String) -> void:
 	log_label.text = "\n".join(_lines)
 
 
-func refresh(player: Actor, turn: int, active_spell_idx := -1, room := 1, remaining_foes := 0, room_cleared := false, active_boss: Actor = null) -> void:
+func refresh(
+	player: Actor,
+	turn: int,
+	active_spell_idx := -1,
+	room := 1,
+	remaining_foes := 0,
+	room_cleared := false,
+	active_boss: Actor = null,
+	room_turns := 0,
+	par_turns := 18,
+	flawless := true
+) -> void:
 	_last_player = player
 	_last_turn = turn
 	_active_spell_index = active_spell_idx
@@ -234,11 +291,20 @@ func refresh(player: Actor, turn: int, active_spell_idx := -1, room := 1, remain
 
 	var weapon := player.weapon.describe() if player.weapon != null else "none"
 	var armor := player.armor.describe() if player.armor != null else "none"
-	var status_line := "\nStatus: " + player.describe_statuses() if player.has_any_status() else ""
+	var status_parts: Array[String] = []
+	if player.holy_mantle_shield:
+		status_parts.append("Holy Mantle Shield")
+	if player.has_any_status():
+		status_parts.append(player.describe_statuses())
+	var status_line := "\nStatus: " + ", ".join(status_parts) if not status_parts.is_empty() else ""
 
 	var room_status := "★ CLEARED ★" if room_cleared else "Foes: %d" % remaining_foes
-	stats_label.text = "Room %d (%s)  |  Turn %d  |  SP: %d\nHP %d/%d   ATK %d   DEF %d\nWeapon: %s\nArmor: %s%s" % [
+	var devil_tag := "ψ OK" if room_turns <= par_turns else "missed"
+	var angel_tag := "† OK" if flawless else "hit"
+	var deal_line := "Par %d/%dt (%s)  |  No-Hit (%s)" % [room_turns, par_turns, devil_tag, angel_tag]
+	stats_label.text = "Room %d (%s)  |  Turn %d  |  SP: %d\n%s\nHP %d/%d   ATK %d   DEF %d\nWeapon: %s   Armor: %s%s" % [
 		room, room_status, turn, player.spell_points,
+		deal_line,
 		player.stats.hp, player.stats.max_hp,
 		player.total_attack(), player.total_defense(),
 		weapon, armor, status_line,
@@ -278,7 +344,8 @@ func _rebuild_spells(player: Actor, active_spell_idx: int) -> void:
 		btn.focus_mode = Control.FOCUS_NONE
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		var active_prefix := ">> " if i == active_spell_idx else ""
-		btn.text = "%s%s  •  %d DMG" % [active_prefix, spell.describe_button(key_label), spell.effective_damage() + bonus_dmg]
+		var stat_suffix := "SUMMON" if spell.pattern == SpellData.Pattern.SUMMON else "%d DMG" % (spell.effective_damage() + bonus_dmg)
+		btn.text = "%s%s  •  %s" % [active_prefix, spell.describe_button(key_label), stat_suffix]
 		if spell.charges <= 0:
 			btn.modulate = Color(0.55, 0.55, 0.55)
 		elif i == active_spell_idx:
@@ -413,3 +480,185 @@ func _rebuild_spellbook(player: Actor) -> void:
 
 		hbox.add_child(action_btn)
 		catalog_list.add_child(row)
+
+
+func _add_debug_header(text: String, color: Color) -> void:
+	var lbl := Label.new()
+	lbl.text = text
+	lbl.modulate = color
+	debug_list.add_child(lbl)
+
+
+func _rebuild_debug_menu() -> void:
+	for child in debug_list.get_children():
+		child.queue_free()
+
+	# 1. Quick Cheats & Portals
+	_add_debug_header("■ QUICK ACTIONS & PORTALS", Color(0.55, 0.9, 1.0))
+	var quick_flow := HFlowContainer.new()
+	quick_flow.add_theme_constant_override("h_separation", 8)
+	quick_flow.add_theme_constant_override("v_separation", 6)
+	debug_list.add_child(quick_flow)
+
+	var quick_actions: Array[Dictionary] = [
+		{"id": "heal_full", "label": "Heal & Refill Spells", "color": Color(0.5, 1.0, 0.65)},
+		{"id": "add_sp", "label": "+5 Spell Points (SP)", "color": Color(0.95, 0.85, 0.4)},
+		{"id": "kill_all", "label": "Kill All Hostiles (Clear)", "color": Color(1.0, 0.55, 0.45)},
+		{"id": "spawn_devil_portal", "label": "Spawn Devil Portal (ψ)", "color": Color(1.0, 0.35, 0.42)},
+		{"id": "spawn_angel_portal", "label": "Spawn Angel Portal (†)", "color": Color(1.0, 0.95, 0.55)},
+		{"id": "enter_devil_room", "label": "Teleport → Devil Room", "color": Color(0.95, 0.3, 0.4)},
+		{"id": "enter_angel_room", "label": "Teleport → Angel Room", "color": Color(0.65, 0.9, 1.0)},
+		{"id": "exit_sanctuary", "label": "Return from Sanctuary (O)", "color": Color(0.75, 0.85, 1.0)},
+	]
+	for entry in quick_actions:
+		var act_id: String = entry["id"]
+		var act_label: String = entry["label"]
+		var act_col: Color = entry["color"]
+		var btn := Button.new()
+		btn.focus_mode = Control.FOCUS_NONE
+		btn.text = act_label
+		btn.modulate = act_col
+		btn.pressed.connect(func() -> void:
+			debug_action_requested.emit(act_id)
+		)
+		quick_flow.add_child(btn)
+
+	# 2. Monsters & Allies
+	_add_debug_header("■ SPAWN MONSTERS & ALLIES (Near Player)", Color(1.0, 0.55, 0.55))
+	for m_info in _debug_monsters:
+		var m_scene: PackedScene = m_info["scene"]
+		var m_name: String = m_info["name"]
+		var m_glyph: String = m_info["glyph"]
+		var m_color: Color = m_info["color"]
+
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		var name_lbl := Label.new()
+		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_lbl.text = "%s  %s" % [m_glyph, m_name]
+		name_lbl.modulate = m_color.lerp(Color.WHITE, 0.35)
+		row.add_child(name_lbl)
+
+		var foe_btn := Button.new()
+		foe_btn.focus_mode = Control.FOCUS_NONE
+		foe_btn.text = "Spawn Enemy"
+		foe_btn.modulate = Color(1.0, 0.55, 0.55)
+		foe_btn.pressed.connect(func() -> void:
+			debug_spawn_monster_requested.emit(m_scene, false)
+		)
+		row.add_child(foe_btn)
+
+		var ally_btn := Button.new()
+		ally_btn.focus_mode = Control.FOCUS_NONE
+		ally_btn.text = "Spawn Ally"
+		ally_btn.modulate = Color(0.45, 0.95, 1.0)
+		ally_btn.pressed.connect(func() -> void:
+			debug_spawn_monster_requested.emit(m_scene, true)
+		)
+		row.add_child(ally_btn)
+		debug_list.add_child(row)
+
+	# 3. Relics
+	_add_debug_header("■ SPAWN / GRANT RELICS (?)", Color(0.95, 0.82, 0.38))
+	for relic in _debug_relics:
+		var rel: ItemData = relic
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		var name_lbl := Label.new()
+		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
+		name_lbl.text = "? %s" % rel.display_name
+		name_lbl.modulate = rel.color.lerp(Color.WHITE, 0.35)
+		name_lbl.mouse_entered.connect(func() -> void:
+			show_item_popup(rel, true)
+		)
+		name_lbl.mouse_exited.connect(hide_popup)
+		row.add_child(name_lbl)
+
+		var floor_btn := Button.new()
+		floor_btn.focus_mode = Control.FOCUS_NONE
+		floor_btn.text = "Spawn Floor"
+		floor_btn.pressed.connect(func() -> void:
+			debug_spawn_item_requested.emit(rel, false)
+		)
+		row.add_child(floor_btn)
+
+		var grant_btn := Button.new()
+		grant_btn.focus_mode = Control.FOCUS_NONE
+		grant_btn.text = "+Give Relic"
+		grant_btn.modulate = Color(0.95, 0.85, 0.45)
+		grant_btn.pressed.connect(func() -> void:
+			debug_spawn_item_requested.emit(rel, true)
+		)
+		row.add_child(grant_btn)
+		debug_list.add_child(row)
+
+	# 4. Items & Equipment
+	_add_debug_header("■ SPAWN / GIVE ITEMS", Color(0.65, 0.95, 0.65))
+	for item in _debug_items:
+		var it: ItemData = item
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		var name_lbl := Label.new()
+		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
+		name_lbl.text = "%s %s (%s)" % [it.glyph, it.display_name, it.type_name()]
+		name_lbl.modulate = it.color.lerp(Color.WHITE, 0.35)
+		name_lbl.mouse_entered.connect(func() -> void:
+			show_item_popup(it, true)
+		)
+		name_lbl.mouse_exited.connect(hide_popup)
+		row.add_child(name_lbl)
+
+		var floor_btn := Button.new()
+		floor_btn.focus_mode = Control.FOCUS_NONE
+		floor_btn.text = "Spawn Floor"
+		floor_btn.pressed.connect(func() -> void:
+			debug_spawn_item_requested.emit(it, false)
+		)
+		row.add_child(floor_btn)
+
+		var give_btn := Button.new()
+		give_btn.focus_mode = Control.FOCUS_NONE
+		give_btn.text = "+Give / Equip"
+		give_btn.modulate = Color(0.6, 1.0, 0.65)
+		give_btn.pressed.connect(func() -> void:
+			debug_spawn_item_requested.emit(it, true)
+		)
+		row.add_child(give_btn)
+		debug_list.add_child(row)
+
+	# 5. Spells
+	_add_debug_header("■ SPAWN SPELL PEDESTALS / LEARN SPELLS", Color(0.75, 0.65, 1.0))
+	for spell in _debug_spells:
+		var sp: SpellData = spell
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		var name_lbl := Label.new()
+		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
+		name_lbl.text = "✦ %s (%s • %s)" % [sp.display_name, sp.element_name(), sp.pattern_name()]
+		name_lbl.modulate = sp.color.lerp(Color.WHITE, 0.35)
+		name_lbl.mouse_entered.connect(func() -> void:
+			show_spell_popup(sp, true)
+		)
+		name_lbl.mouse_exited.connect(hide_popup)
+		row.add_child(name_lbl)
+
+		var ped_btn := Button.new()
+		ped_btn.focus_mode = Control.FOCUS_NONE
+		ped_btn.text = "Spawn Pedestal"
+		ped_btn.pressed.connect(func() -> void:
+			debug_spawn_spell_requested.emit(sp, false)
+		)
+		row.add_child(ped_btn)
+
+		var learn_btn := Button.new()
+		learn_btn.focus_mode = Control.FOCUS_NONE
+		learn_btn.text = "+Learn / Upgrade"
+		learn_btn.modulate = Color(0.8, 0.7, 1.0)
+		learn_btn.pressed.connect(func() -> void:
+			debug_spawn_spell_requested.emit(sp, true)
+		)
+		row.add_child(learn_btn)
+		debug_list.add_child(row)

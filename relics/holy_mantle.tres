@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Holy Mantle"
+description = "Divine aegis that wards your soul. Blocks the first instance of damage you would take in every room!"
+glyph = "?"
+color = Color(0.55, 0.9, 1, 1)
+type = 5
+defense_bonus = 1
+relic_effect = 11
+
