@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Phoenix Feather"
+description = "A smoldering golden plume. When you would die, you instead rise with half your Max HP and all afflictions cleansed. Consumed on use (stacks)."
+glyph = "?"
+color = Color(1, 0.8, 0.2, 1)
+type = 5
+relic_effect = 13
+

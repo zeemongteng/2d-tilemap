@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Soul Vessel"
+description = "A cracked urn that drinks the dying breath of your victims. Every 4th kill permanently grants +1 Max HP (and heals 1). Stacks."
+glyph = "?"
+color = Color(0.7, 0.85, 1, 1)
+type = 5
+relic_effect = 17
+

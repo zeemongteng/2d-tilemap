@@ -1,0 +1,24 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://actor.gd" id="1_actor"]
+[ext_resource type="Script" path="res://stats.gd" id="2_stats"]
+[ext_resource type="Resource" path="res://statuses/hexed.tres" id="3_hexed"]
+
+[sub_resource type="Resource" id="Resource_stats"]
+script = ExtResource("2_stats")
+max_hp = 6
+attack = 2
+defense = 0
+
+[node name="Hexer" type="Node2D"]
+script = ExtResource("1_actor")
+display_name = "The hexer"
+description = "Hooded cultist muttering curses from 4 hexes away. Its hexes make you take +50% damage."
+glyph = "c"
+color = Color(0.72, 0.35, 0.95, 1)
+stats = SubResource("Resource_stats")
+loot_chance = 0.5
+attack_range = 4
+min_room = 3
+on_hit_status = ExtResource("3_hexed")
+on_hit_status_duration = 3

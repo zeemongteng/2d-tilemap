@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Mystery Pill"
+description = "An unlabeled capsule. Could be a blessing, could be a curse. Swallow at your own risk."
+glyph = "p"
+color = Color(0.9, 0.9, 0.95, 1)
+type = 11

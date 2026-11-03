@@ -2,7 +2,7 @@ class_name SpellData
 extends Resource
 ## Rift Wizard-style spell resource with charges, elemental types, AoE patterns, summoning, and SP upgrades.
 
-enum Element { FIRE, LIGHTNING, ICE, ARCANE }
+enum Element { FIRE, LIGHTNING, ICE, ARCANE, NATURE, DARK, HOLY }
 enum Pattern { SINGLE, BLAST, BEAM, CHAIN, BLINK, NOVA, SUMMON }
 
 @export var display_name := "Spell"
@@ -21,6 +21,8 @@ enum Pattern { SINGLE, BLAST, BEAM, CHAIN, BLINK, NOVA, SUMMON }
 @export var status_duration := 0
 @export var summon_scene: PackedScene
 @export var requires_los := true
+## HP the caster recovers for every foe struck.
+@export var heal_per_hit := 0
 
 @export_group("Progression")
 @export var learn_cost := 1
@@ -89,6 +91,12 @@ func element_name() -> String:
 			return "Ice"
 		Element.ARCANE:
 			return "Arcane"
+		Element.NATURE:
+			return "Nature"
+		Element.DARK:
+			return "Dark"
+		Element.HOLY:
+			return "Holy"
 	return "Magic"
 
 
@@ -129,6 +137,8 @@ func describe_details() -> String:
 		parts.append("Rng %d" % effective_range())
 	if status_effect != null and status_duration > 0:
 		parts.append("%s (%dt)" % [status_effect.display_name, status_duration])
+	if heal_per_hit > 0:
+		parts.append("Heals %d/hit" % heal_per_hit)
 	parts.append("%d Charges" % effective_max_charges())
 	var stats_line := "  •  ".join(parts)
 	if description.is_empty():

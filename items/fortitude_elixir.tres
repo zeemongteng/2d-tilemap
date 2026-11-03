@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Elixir of Fortitude"
+description = "Bitter golden syrup. Heals a little and permanently toughens your constitution."
+glyph = "!"
+color = Color(0.95, 0.8, 0.3, 1)
+heal_amount = 6
+max_hp_bonus = 3

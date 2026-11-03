@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+[ext_resource type="Resource" path="res://statuses/burn.tres" id="2_burn"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Flame Brand"
+description = "A greatsword whose edge glows like a forge. Strikes set the target alight."
+glyph = "/"
+color = Color(1, 0.5, 0.15, 1)
+type = 0
+attack_bonus = 5
+on_hit_status = ExtResource("2_burn")
+on_hit_status_duration = 2

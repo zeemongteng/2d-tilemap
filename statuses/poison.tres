@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="StatusData" format=3]
+
+[ext_resource type="Script" path="res://status_data.gd" id="1_status"]
+
+[resource]
+script = ExtResource("1_status")
+id = "poison"
+display_name = "Poisoned"
+description = "Venom courses through the veins. Takes 2 damage per turn and cannot regenerate HP."
+badge_glyph = "%"
+color = Color(0.55, 0.9, 0.25, 1)
+default_duration = 3
+damage_per_turn = 2
+blocks_regen = true
+

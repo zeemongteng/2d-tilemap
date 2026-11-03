@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Gasoline"
+description = "Reeking of fumes. Whenever a foe dies, the fire spreads: all foes within 1 hex are set ablaze. Stacks widen the blaze and lengthen it."
+glyph = "?"
+color = Color(1, 0.6, 0.15, 1)
+type = 5
+relic_effect = 14
+

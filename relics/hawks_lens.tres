@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Hawk's Lens"
+description = "A scrying monocle ground from a raptor's eye. Permanently grants +2 Cast Range and +1 Spell Damage."
+glyph = "?"
+color = Color(0.6, 0.85, 0.5, 1)
+type = 5
+spell_damage_bonus = 1
+spell_range_bonus = 2
+relic_effect = 20
+

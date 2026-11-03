@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Glass Cannon"
+description = "A brittle crystal that hums with unstable power. Permanently grants +6 Spell Damage and +2 ATK. Devil's price: a heavy toll in Max HP."
+glyph = "?"
+color = Color(1, 0.25, 0.55, 1)
+type = 5
+attack_bonus = 2
+spell_damage_bonus = 6
+hp_cost = 8
+relic_effect = 12
+

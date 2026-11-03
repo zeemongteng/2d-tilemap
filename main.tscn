@@ -38,22 +38,62 @@
 [ext_resource type="Resource" path="res://relics/vampiric_maw.tres" id="36_vampiric_maw"]
 [ext_resource type="Resource" path="res://relics/sacred_heart.tres" id="37_sacred_heart"]
 [ext_resource type="Resource" path="res://relics/holy_mantle.tres" id="38_holy_mantle"]
+[ext_resource type="PackedScene" path="res://monsters/giant_spider.tscn" id="40_spider"]
+[ext_resource type="PackedScene" path="res://monsters/skeleton_archer.tscn" id="41_archer"]
+[ext_resource type="PackedScene" path="res://monsters/hexer.tscn" id="42_hexer"]
+[ext_resource type="PackedScene" path="res://monsters/slime.tscn" id="43_slime"]
+[ext_resource type="PackedScene" path="res://monsters/bomber.tscn" id="44_bomber"]
+[ext_resource type="PackedScene" path="res://monsters/ogre.tscn" id="45_ogre"]
+[ext_resource type="PackedScene" path="res://monsters/frost_wisp.tscn" id="46_wisp"]
+[ext_resource type="PackedScene" path="res://monsters/bone_lord.tscn" id="47_bone_lord"]
+[ext_resource type="PackedScene" path="res://monsters/pyre_warden.tscn" id="48_pyre_warden"]
+[ext_resource type="PackedScene" path="res://monsters/bone_crypt.tscn" id="49_crypt"]
+[ext_resource type="PackedScene" path="res://monsters/slime_pit.tscn" id="50_slime_pit"]
+[ext_resource type="Resource" path="res://spells/magic_missile.tres" id="51_missile"]
+[ext_resource type="Resource" path="res://spells/venom_spit.tres" id="52_venom"]
+[ext_resource type="Resource" path="res://spells/toxic_cloud.tres" id="53_toxic"]
+[ext_resource type="Resource" path="res://spells/hex.tres" id="54_hex"]
+[ext_resource type="Resource" path="res://spells/raise_skeleton.tres" id="55_raise"]
+[ext_resource type="Resource" path="res://spells/blizzard.tres" id="56_blizzard"]
+[ext_resource type="Resource" path="res://spells/stone_golem.tres" id="57_golem"]
+[ext_resource type="Resource" path="res://spells/meteor.tres" id="58_meteor"]
+[ext_resource type="Resource" path="res://spells/life_drain.tres" id="59_drain"]
+[ext_resource type="Resource" path="res://spells/guardian_angel.tres" id="60_angel"]
+[ext_resource type="Resource" path="res://relics/gasoline.tres" id="61_r_gas"]
+[ext_resource type="Resource" path="res://relics/venom_fang.tres" id="62_r_fang"]
+[ext_resource type="Resource" path="res://relics/bandolier.tres" id="63_r_bandolier"]
+[ext_resource type="Resource" path="res://relics/soul_vessel.tres" id="64_r_soul"]
+[ext_resource type="Resource" path="res://relics/ukulele.tres" id="65_r_uke"]
+[ext_resource type="Resource" path="res://relics/lucky_penny.tres" id="66_r_penny"]
+[ext_resource type="Resource" path="res://relics/hawks_lens.tres" id="67_r_lens"]
+[ext_resource type="Resource" path="res://relics/glass_cannon.tres" id="68_r_glass"]
+[ext_resource type="Resource" path="res://relics/phoenix_feather.tres" id="69_r_phoenix"]
+[ext_resource type="Resource" path="res://items/venom_dagger.tres" id="70_dagger"]
+[ext_resource type="Resource" path="res://items/flame_brand.tres" id="71_brand"]
+[ext_resource type="Resource" path="res://items/warlock_staff.tres" id="72_staff"]
+[ext_resource type="Resource" path="res://items/wizard_robes.tres" id="73_robes"]
+[ext_resource type="Resource" path="res://items/plate_armor.tres" id="74_plate"]
+[ext_resource type="Resource" path="res://items/greater_healing_potion.tres" id="75_gpotion"]
+[ext_resource type="Resource" path="res://items/fortitude_elixir.tres" id="76_elixir"]
+[ext_resource type="Resource" path="res://items/greater_memory_orb.tres" id="77_gorb"]
+[ext_resource type="Resource" path="res://items/rift_bomb.tres" id="78_bomb"]
+[ext_resource type="Resource" path="res://items/mystery_pill.tres" id="79_pill"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_game")
 player_scene = ExtResource("3_player")
 monster_scene = ExtResource("4_goblin")
-monster_pool = Array[PackedScene]([ExtResource("4_goblin"), ExtResource("4_goblin"), ExtResource("20_skeleton"), ExtResource("21_imp"), ExtResource("22_troll")])
-spawner_scene = ExtResource("23_spawner")
-boss_scene = ExtResource("31_boss")
+monster_pool = Array[PackedScene]([ExtResource("4_goblin"), ExtResource("4_goblin"), ExtResource("20_skeleton"), ExtResource("21_imp"), ExtResource("22_troll"), ExtResource("40_spider"), ExtResource("41_archer"), ExtResource("43_slime"), ExtResource("42_hexer"), ExtResource("44_bomber"), ExtResource("46_wisp"), ExtResource("45_ogre")])
+spawner_pool = Array[PackedScene]([ExtResource("23_spawner"), ExtResource("23_spawner"), ExtResource("49_crypt"), ExtResource("50_slime_pit")])
+boss_pool = Array[PackedScene]([ExtResource("31_boss"), ExtResource("47_bone_lord"), ExtResource("48_pyre_warden")])
 world_item_scene = ExtResource("5_world_item")
-item_pool = Array[Resource]([ExtResource("7_sword"), ExtResource("8_axe"), ExtResource("9_leather"), ExtResource("10_mail"), ExtResource("11_potion"), ExtResource("12_mana"), ExtResource("12_mana"), ExtResource("13_orb")])
-relic_pool = Array[Resource]([ExtResource("24_r_blood"), ExtResource("25_r_vajra"), ExtResource("26_r_anchor"), ExtResource("27_r_storm"), ExtResource("28_r_prism"), ExtResource("29_r_cinder"), ExtResource("30_r_permafrost")])
-devil_pool = Array[Resource]([ExtResource("35_the_mark"), ExtResource("36_vampiric_maw"), ExtResource("33_brimstone")])
-angel_pool = Array[Resource]([ExtResource("37_sacred_heart"), ExtResource("38_holy_mantle"), ExtResource("34_divine_smite")])
+item_pool = Array[Resource]([ExtResource("7_sword"), ExtResource("8_axe"), ExtResource("70_dagger"), ExtResource("71_brand"), ExtResource("72_staff"), ExtResource("9_leather"), ExtResource("10_mail"), ExtResource("73_robes"), ExtResource("74_plate"), ExtResource("11_potion"), ExtResource("11_potion"), ExtResource("75_gpotion"), ExtResource("76_elixir"), ExtResource("12_mana"), ExtResource("12_mana"), ExtResource("13_orb"), ExtResource("77_gorb"), ExtResource("78_bomb"), ExtResource("78_bomb"), ExtResource("79_pill"), ExtResource("79_pill")])
+relic_pool = Array[Resource]([ExtResource("24_r_blood"), ExtResource("25_r_vajra"), ExtResource("26_r_anchor"), ExtResource("27_r_storm"), ExtResource("28_r_prism"), ExtResource("29_r_cinder"), ExtResource("30_r_permafrost"), ExtResource("61_r_gas"), ExtResource("62_r_fang"), ExtResource("63_r_bandolier"), ExtResource("64_r_soul"), ExtResource("65_r_uke"), ExtResource("66_r_penny"), ExtResource("67_r_lens")])
+devil_pool = Array[Resource]([ExtResource("35_the_mark"), ExtResource("36_vampiric_maw"), ExtResource("33_brimstone"), ExtResource("68_r_glass"), ExtResource("59_drain"), ExtResource("58_meteor")])
+angel_pool = Array[Resource]([ExtResource("37_sacred_heart"), ExtResource("38_holy_mantle"), ExtResource("34_divine_smite"), ExtResource("69_r_phoenix"), ExtResource("60_angel")])
 starting_items = Array[Resource]([ExtResource("12_mana"), ExtResource("11_potion")])
 starting_spells = Array[Resource]([ExtResource("14_fireball"), ExtResource("15_lightning"), ExtResource("16_icicle"), ExtResource("32_wolf_spell")])
-spell_catalog = Array[Resource]([ExtResource("14_fireball"), ExtResource("15_lightning"), ExtResource("16_icicle"), ExtResource("32_wolf_spell"), ExtResource("17_chain"), ExtResource("18_blink"), ExtResource("19_nova")])
+spell_catalog = Array[Resource]([ExtResource("14_fireball"), ExtResource("15_lightning"), ExtResource("16_icicle"), ExtResource("32_wolf_spell"), ExtResource("17_chain"), ExtResource("18_blink"), ExtResource("19_nova"), ExtResource("51_missile"), ExtResource("52_venom"), ExtResource("53_toxic"), ExtResource("54_hex"), ExtResource("55_raise"), ExtResource("56_blizzard"), ExtResource("57_golem")])
 
 [node name="HexGrid" type="Node2D" parent="."]
 script = ExtResource("2_grid")

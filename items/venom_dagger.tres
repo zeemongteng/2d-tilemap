@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+[ext_resource type="Resource" path="res://statuses/poison.tres" id="2_poison"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Venom Dagger"
+description = "A slender blade slick with green ichor. Each stab poisons the target."
+glyph = "t"
+color = Color(0.55, 0.9, 0.25, 1)
+type = 0
+attack_bonus = 2
+on_hit_status = ExtResource("2_poison")
+on_hit_status_duration = 3

@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="SpellData" format=3]
+
+[ext_resource type="Script" path="res://spell_data.gd" id="1_spell"]
+[ext_resource type="Resource" path="res://statuses/hexed.tres" id="2_hexed"]
+
+[resource]
+script = ExtResource("1_spell")
+display_name = "Hex"
+description = "Lays a curse on a single foe for 4 turns. Hexed creatures take +50% damage from everything — set up your big spells with this."
+element = 5
+pattern = 0
+color = Color(0.72, 0.35, 0.95, 1)
+max_charges = 5
+cast_range = 6
+damage = 1
+status_effect = ExtResource("2_hexed")
+status_duration = 4
+learn_cost = 1
+upgrade_cost = 2
+bonus_damage_per_level = 1
+bonus_charges_per_level = 2
+bonus_range_per_level = 1

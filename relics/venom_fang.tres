@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+[ext_resource type="Resource" path="res://statuses/poison.tres" id="2_poison"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Venom Fang"
+description = "A snake's fang still weeping toxin. Grants +1 ATK, and your melee hits poison the target for 3 turns."
+glyph = "?"
+color = Color(0.55, 0.9, 0.25, 1)
+type = 5
+attack_bonus = 1
+on_hit_status = ExtResource("2_poison")
+on_hit_status_duration = 3
+relic_effect = 15
+

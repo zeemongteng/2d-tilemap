@@ -12,7 +12,7 @@ signal debug_spawn_item_requested(item: ItemData, grant_directly: bool)
 signal debug_spawn_spell_requested(spell: SpellData, grant_directly: bool)
 
 const MAX_LOG_LINES := 6
-const SPELL_KEYS: Array[String] = ["Q", "W", "E", "F", "G", "C"]
+const SPELL_KEYS: Array[String] = ["Q", "W", "E", "F", "G", "C", "Z", "X", "V", "T"]
 
 @onready var stats_label: Label = $Stats
 @onready var boss_panel: VBoxContainer = $BossPanel
@@ -125,13 +125,13 @@ func is_any_modal_open() -> bool:
 	return spellbook_modal.visible or confirm_modal.visible or debug_modal.visible
 
 
-func prompt_next_room(next_room_num: int, edge_cell: Vector2i, is_boss_room := false) -> void:
+func prompt_next_room(next_room_num: int, edge_cell: Vector2i, is_boss_room := false, boss_name := "") -> void:
 	_pending_edge_cell = edge_cell
 	hide_popup()
 	if is_boss_room:
 		confirm_title.text = "⚠ BOSS LAIR — ENTER ROOM %d? ⚠" % next_room_num
 		confirm_title.modulate = Color(1.0, 0.38, 0.38)
-		confirm_text.text = "Tremors shake the cavern beyond this doorway.\nA 7-hex Rift Colossus awaits in Room %d!" % next_room_num
+		confirm_text.text = "Tremors shake the cavern beyond this doorway.\n%s awaits in Room %d!" % [boss_name if not boss_name.is_empty() else "A boss", next_room_num]
 	else:
 		confirm_title.text = "ENTER ROOM %d?" % next_room_num
 		confirm_title.modulate = Color(0.45, 1.0, 0.6)
@@ -214,7 +214,13 @@ func show_actor_popup(actor: Actor) -> void:
 	if actor == null:
 		return
 	_ui_hover_active = false
-	var boss_tag := " [BOSS • 7-HEX]" if actor.is_boss else (" [ALLY]" if actor.is_allies else "")
+	var boss_tag := ""
+	if actor.is_boss:
+		boss_tag = " [BOSS • 7-HEX]" if actor.footprint_radius > 0 else " [BOSS]"
+	elif actor.is_elite:
+		boss_tag = " [ELITE]"
+	elif actor.is_allies:
+		boss_tag = " [ALLY]"
 	popup_title.text = "%s %s%s" % [actor.glyph, actor.display_name.capitalize(), boss_tag]
 	popup_title.modulate = actor.color.lerp(Color.WHITE, 0.35)
 	if actor.is_spawner:

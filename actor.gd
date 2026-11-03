@@ -21,6 +21,17 @@ extends Node2D
 @export var is_boss := false
 @export var footprint_radius := 0
 @export var slam_damage := 7
+## Earliest room this monster can randomly appear in.
+@export var min_room := 1
+## Inflicted on the target by this actor's melee and ranged hits.
+@export var on_hit_status: StatusData
+@export var on_hit_status_duration := 3
+## On death, deals this much damage to every other creature within death_blast_radius hexes.
+@export var death_blast_damage := 0
+@export var death_blast_radius := 1
+## On death, splits into this many copies of death_spawn_scene.
+@export var death_spawn_scene: PackedScene
+@export var death_spawn_count := 2
 
 var cell := Vector2i.ZERO
 var grid: HexGrid
@@ -36,6 +47,9 @@ var spawn_cooldown := 3
 var ability_cooldown := 2
 var telegraph_cells: Array[Vector2i] = []
 var holy_mantle_shield := false
+var phoenix_charges := 0
+var is_elite := false
+var elite_color := Color.WHITE
 
 
 func _ready() -> void:
@@ -98,6 +112,10 @@ func total_spell_damage_bonus() -> int:
 	var bonus := 0
 	for r in relics:
 		bonus += r.spell_damage_bonus
+	if weapon != null:
+		bonus += weapon.spell_damage_bonus
+	if armor != null:
+		bonus += armor.spell_damage_bonus
 	return bonus
 
 
@@ -142,6 +160,8 @@ func add_relic(relic: ItemData) -> void:
 		stats.hp = stats.max_hp
 	if relic.relic_effect == ItemData.RelicEffect.HOLY_MANTLE:
 		holy_mantle_shield = true
+	if relic.relic_effect == ItemData.RelicEffect.PHOENIX_FEATHER:
+		phoenix_charges += 1
 	queue_redraw()
 
 
@@ -264,6 +284,11 @@ func take_damage(amount: int, flash_color := Color(1, 0.3, 0.3)) -> int:
 		queue_redraw()
 		return 0
 	stats.hp = maxi(0, stats.hp - amount)
+	if stats.hp <= 0 and phoenix_charges > 0:
+		phoenix_charges -= 1
+		stats.hp = maxi(1, stats.max_hp / 2)
+		statuses.clear()
+		flash_color = Color(1.0, 0.85, 0.3)
 	modulate = flash_color
 	create_tween().tween_property(self, "modulate", Color.WHITE, 0.25)
 	queue_redraw()
@@ -294,6 +319,11 @@ func get_learned_spell(spell_name: String) -> SpellData:
 func restore_all_spells(amount: int) -> void:
 	for s in spells:
 		s.restore_charges(amount)
+
+
+func recharge_all_spells() -> void:
+	for s in spells:
+		s.charges = s.effective_max_charges()
 
 
 ## Equips a weapon or armor; the replaced piece goes back into the inventory.
@@ -336,6 +366,9 @@ func _draw() -> void:
 		draw_arc(Vector2.ZERO, font_size * 0.58, 0.0, TAU, 24, Color(draw_col.r, draw_col.g, draw_col.b, 0.45), 2.0)
 	elif is_allies and glyph != "@":
 		draw_arc(Vector2.ZERO, font_size * 0.52, 0.0, TAU, 20, Color(0.3, 0.95, 0.65, 0.55), 2.0)
+	if is_elite:
+		draw_arc(Vector2.ZERO, font_size * 0.7, 0.0, TAU, 28, Color(elite_color.r, elite_color.g, elite_color.b, 0.9), 2.4)
+		draw_arc(Vector2.ZERO, font_size * 0.78, 0.0, TAU, 28, Color(elite_color.r, elite_color.g, elite_color.b, 0.4), 1.4)
 	if holy_mantle_shield:
 		draw_arc(Vector2.ZERO, font_size * 0.62, 0.0, TAU, 24, Color(0.55, 0.92, 1.0, 0.85), 2.2)
 

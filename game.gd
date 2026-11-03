@@ -5,13 +5,17 @@ extends Node2D
 
 const STEP_TIME := 0.08
 const MAX_INVENTORY := 9
-const SPELL_HOTKEYS: Array[Key] = [KEY_Q, KEY_W, KEY_E, KEY_F, KEY_G, KEY_C]
+const SPELL_HOTKEYS: Array[Key] = [KEY_Q, KEY_W, KEY_E, KEY_F, KEY_G, KEY_C, KEY_Z, KEY_X, KEY_V, KEY_T]
+const BURN_STATUS: StatusData = preload("res://statuses/burn.tres")
+const POISON_STATUS: StatusData = preload("res://statuses/poison.tres")
+const SHOCK_STATUS: StatusData = preload("res://statuses/shock.tres")
 
 @export var player_scene: PackedScene
 @export var monster_scene: PackedScene
 @export var monster_pool: Array[PackedScene]
-@export var spawner_scene: PackedScene
-@export var boss_scene: PackedScene
+@export var spawner_pool: Array[PackedScene]
+## Boss rooms cycle through this list in order, then loop with beefier bosses.
+@export var boss_pool: Array[PackedScene]
 @export var world_item_scene: PackedScene
 @export var item_pool: Array[Resource]
 @export var relic_pool: Array[Resource]
@@ -45,10 +49,18 @@ var _dead := false
 var _cancel_walk := false
 var _active_spell_index := -1
 var _rng := RandomNumberGenerator.new()
+var _min_room_cache: Dictionary = {}
+var _elite_affixes: Array[Dictionary] = []
 
 
 func _ready() -> void:
 	_rng.randomize()
+	_elite_affixes.assign([
+		{"name": "blazing", "color": Color(1.0, 0.5, 0.15), "status": BURN_STATUS, "regen": 0, "desc": "Its blows set you ablaze."},
+		{"name": "venomous", "color": Color(0.55, 0.9, 0.25), "status": POISON_STATUS, "regen": 0, "desc": "Its blows poison you."},
+		{"name": "stormcharged", "color": Color(1.0, 0.92, 0.3), "status": SHOCK_STATUS, "regen": 0, "desc": "Its blows shock you."},
+		{"name": "mending", "color": Color(0.4, 1.0, 0.7), "status": null, "regen": 2, "desc": "Regenerates 2 HP every turn."},
+	])
 	grid.generate()
 
 	var typed_catalog: Array[SpellData] = []
@@ -117,10 +129,10 @@ func _populate_current_room(entry_cell: Vector2i) -> void:
 	grid.clear_spell_preview()
 	grid.set_danger_cells([])
 
-	if _is_boss_room(room_level) and boss_scene != null:
+	if _is_boss_room(room_level) and not boss_pool.is_empty():
 		var boss_cell := grid.current_room_center
 		grid.crush_walls_in_radius(boss_cell, 2)
-		var boss := _spawn_actor(boss_scene, boss_cell)
+		var boss := _spawn_actor(_boss_scene_for_room(room_level), boss_cell)
 		var extra_hp := maxi(0, (room_level - 2) * 8)
 		boss.stats.max_hp += extra_hp
 		boss.stats.hp = boss.stats.max_hp
@@ -134,7 +146,7 @@ func _populate_current_room(entry_cell: Vector2i) -> void:
 		for i in total_spawners:
 			var cell := grid.random_floor_cell(_rng, 4, entry_cell, 5)
 			if not _is_occupied(cell):
-				var spawner := _spawn_actor(spawner_scene if spawner_scene != null else monster_scene, cell)
+				var spawner := _spawn_actor(_random_spawner_scene(), cell)
 				if spawner.spawn_scene == null:
 					spawner.spawn_scene = _random_monster_scene()
 				monsters.append(spawner)
@@ -143,14 +155,16 @@ func _populate_current_room(entry_cell: Vector2i) -> void:
 		for i in total_monsters:
 			var cell := grid.random_floor_cell(_rng, 3, entry_cell, 4)
 			if not _is_occupied(cell):
-				monsters.append(_spawn_actor(_random_monster_scene(), cell))
+				var monster := _spawn_actor(_random_monster_scene(), cell)
+				_maybe_make_elite(monster)
+				monsters.append(monster)
 
 	for i in item_count:
 		var cell := grid.random_floor_cell(_rng, 2, entry_cell, 2)
 		if not _is_occupied(cell) and _item_at(cell) == null:
 			_spawn_item(_random_item(), cell)
 
-	if _rng.randf() < relic_spawn_chance:
+	if _rng.randf() < relic_spawn_chance + 0.1 * player.count_relic(ItemData.RelicEffect.LUCKY_PENNY):
 		var relic_cell := grid.random_floor_cell(_rng, 4, entry_cell, 4)
 		if not _is_occupied(relic_cell) and _item_at(relic_cell) == null:
 			_spawn_item(_random_relic(), relic_cell)
@@ -187,7 +201,8 @@ func _on_next_room_confirmed(edge_cell: Vector2i) -> void:
 
 	_populate_current_room(player.cell)
 	if boss_room:
-		hud.post("⚠ BOSS LAIR (Room %d)! The 7-hex Rift Colossus awakens!" % room_level)
+		var lair_boss := _active_boss()
+		hud.post("⚠ BOSS LAIR (Room %d)! %s awakens!" % [room_level, lair_boss.display_name if lair_boss != null else "A boss"])
 	else:
 		hud.post("Entered Room %d! %d foes await (Par: %d turns)." % [room_level, _hostile_count(), _room_par_turns])
 
@@ -219,7 +234,8 @@ func _check_edge_trigger() -> bool:
 		hud.post("The passage out of this room is sealed until all monsters are defeated!")
 		return false
 	var next_room := room_level + 1
-	hud.prompt_next_room(next_room, player.cell, _is_boss_room(next_room))
+	var next_is_boss := _is_boss_room(next_room) and not boss_pool.is_empty()
+	hud.prompt_next_room(next_room, player.cell, next_is_boss, _boss_name_for_room(next_room) if next_is_boss else "")
 	return true
 
 
@@ -364,10 +380,68 @@ func _spawn_actor(scene: PackedScene, cell: Vector2i) -> Actor:
 	return actor
 
 
+func _boss_scene_for_room(room_num: int) -> PackedScene:
+	return boss_pool[((room_num - 2) / 3) % boss_pool.size()]
+
+
+func _boss_name_for_room(room_num: int) -> String:
+	var temp := _boss_scene_for_room(room_num).instantiate() as Actor
+	var boss_name := temp.display_name if temp != null else "A boss"
+	if temp != null:
+		temp.free()
+	return boss_name
+
+
+func _random_spawner_scene() -> PackedScene:
+	if spawner_pool.is_empty():
+		return monster_scene
+	return spawner_pool[_rng.randi_range(0, spawner_pool.size() - 1)]
+
+
+func _scene_min_room(scene: PackedScene) -> int:
+	if _min_room_cache.has(scene):
+		return _min_room_cache[scene]
+	var temp := scene.instantiate() as Actor
+	var value := temp.min_room if temp != null else 1
+	if temp != null:
+		temp.free()
+	_min_room_cache[scene] = value
+	return value
+
+
+## Deeper rooms unlock tougher monsters (Actor.min_room).
 func _random_monster_scene() -> PackedScene:
 	if monster_pool.is_empty():
 		return monster_scene
-	return monster_pool[_rng.randi_range(0, monster_pool.size() - 1)]
+	var eligible: Array[PackedScene] = []
+	for sc in monster_pool:
+		if sc != null and _scene_min_room(sc) <= room_level:
+			eligible.append(sc)
+	if eligible.is_empty():
+		return monster_scene
+	return eligible[_rng.randi_range(0, eligible.size() - 1)]
+
+
+## Risk-of-Rain style elites: rarer early, more common as rooms climb.
+func _maybe_make_elite(monster: Actor) -> void:
+	var chance := clampf(0.06 * float(room_level - 1), 0.0, 0.4)
+	if monster.is_boss or monster.is_spawner or monster.is_allies or _rng.randf() >= chance:
+		return
+	var affix: Dictionary = _elite_affixes[_rng.randi_range(0, _elite_affixes.size() - 1)]
+	monster.is_elite = true
+	monster.elite_color = affix["color"]
+	monster.stats.max_hp = int(ceil(float(monster.stats.max_hp) * 1.75))
+	monster.stats.hp = monster.stats.max_hp
+	monster.stats.attack += 1 + room_level / 4
+	monster.loot_chance = maxf(monster.loot_chance, 0.85)
+	monster.display_name = "The %s %s" % [affix["name"], monster.display_name.trim_prefix("The ")]
+	var affix_status: StatusData = affix["status"]
+	if affix_status != null and monster.on_hit_status == null:
+		monster.on_hit_status = affix_status
+		monster.on_hit_status_duration = 3
+	monster.regen_per_turn += int(affix["regen"])
+	monster.description = "%s\n★ ELITE: %s" % [monster.description, affix["desc"]]
+	monster.queue_redraw()
 
 
 func _spawn_item(data: ItemData, cell: Vector2i, pedestal := false, angel_pedestal := false) -> void:
@@ -637,11 +711,13 @@ func _init_debug_catalog() -> void:
 	for sc in monster_pool:
 		if sc != null:
 			candidate_scenes.append(sc)
-	if spawner_scene != null:
-		candidate_scenes.append(spawner_scene)
-	if boss_scene != null:
-		candidate_scenes.append(boss_scene)
-	for sp_res in spell_catalog:
+	for sc in spawner_pool:
+		if sc != null:
+			candidate_scenes.append(sc)
+	for sc in boss_pool:
+		if sc != null:
+			candidate_scenes.append(sc)
+	for sp_res in spell_catalog + devil_pool + angel_pool:
 		if sp_res is SpellData and (sp_res as SpellData).summon_scene != null:
 			candidate_scenes.append((sp_res as SpellData).summon_scene)
 
@@ -802,8 +878,8 @@ func _on_debug_spawn_item_requested(item: ItemData, grant_directly: bool) -> voi
 				player.add_relic(copy)
 				hud.post("[Debug] Granted Relic: %s!" % copy.display_name)
 			ItemData.Type.SPELL_ORB:
-				player.spell_points += copy.power
-				hud.post("[Debug] Granted +%d Spell Points!" % copy.power)
+				player.spell_points += copy.sp_amount
+				hud.post("[Debug] Granted +%d Spell Points!" % copy.sp_amount)
 			ItemData.Type.WEAPON:
 				player.weapon = copy
 				hud.post("[Debug] Equipped %s!" % copy.describe())
@@ -1012,6 +1088,10 @@ func _cast_spell(spell: SpellData, target_cell: Vector2i) -> void:
 		hud.post("You cast %s.%s" % [spell.display_name, free_note])
 	else:
 		hud.post("You cast %s, hitting %s.%s" % [spell.display_name, ", ".join(hit_names), free_note])
+		if spell.heal_per_hit > 0:
+			var drained := spell.heal_per_hit * hit_monsters.size()
+			player.heal(drained)
+			hud.post("You drain %d HP from your victims." % drained)
 
 	for m in hit_monsters:
 		if m.is_dead():
@@ -1058,8 +1138,15 @@ func _use_item(index: int) -> void:
 	player.inventory.remove_at(index)
 	match item.type:
 		ItemData.Type.POTION:
+			if item.max_hp_bonus > 0:
+				player.stats.max_hp += item.max_hp_bonus
 			player.heal(item.heal_amount)
-			hud.post("You drink the %s (+%d HP)." % [item.display_name.to_lower(), item.heal_amount])
+			var max_note := ", +%d Max HP" % item.max_hp_bonus if item.max_hp_bonus > 0 else ""
+			hud.post("You drink the %s (+%d HP%s)." % [item.display_name.to_lower(), item.heal_amount, max_note])
+		ItemData.Type.BOMB:
+			_detonate_bomb(item)
+		ItemData.Type.PILL:
+			_swallow_pill()
 		ItemData.Type.MANA_POTION:
 			player.restore_all_spells(item.charge_restore)
 			hud.post("You drink the %s (+%d charges to all spells)." % [item.display_name.to_lower(), item.charge_restore])
@@ -1078,6 +1165,54 @@ func _use_item(index: int) -> void:
 func _active_spell_clear_quiet() -> void:
 	_active_spell_index = -1
 	grid.clear_spell_preview()
+
+
+func _detonate_bomb(bomb: ItemData) -> void:
+	var blast_cells := grid.cells_in_radius(player.cell, bomb.blast_radius, true)
+	blast_cells.erase(player.cell)
+	grid.play_spell_vfx(blast_cells, bomb.color)
+	var hit_names: Array[String] = []
+	var victims: Array[Actor] = []
+	for m in monsters.duplicate():
+		if m.is_allies or m.is_dead() or m.distance_to_cell(player.cell) > bomb.blast_radius:
+			continue
+		var dmg := int(ceil(float(bomb.blast_damage) * m.incoming_damage_multiplier()))
+		m.consume_shatter_statuses()
+		m.take_damage(dmg, bomb.color)
+		hit_names.append("%s (%d)" % [m.display_name.to_lower(), dmg])
+		victims.append(m)
+	if hit_names.is_empty():
+		hud.post("You detonate the %s. It fizzles harmlessly — nothing was nearby." % bomb.display_name.to_lower())
+	else:
+		hud.post("BOOM! The %s hits %s." % [bomb.display_name.to_lower(), ", ".join(hit_names)])
+	for m in victims:
+		if m.is_dead():
+			_handle_monster_death(m)
+
+
+func _swallow_pill() -> void:
+	match _rng.randi_range(0, 5):
+		0:
+			player.stats.max_hp += 2
+			player.heal(2)
+			hud.post("You swallow a pill... Vitality! (+2 Max HP)")
+		1:
+			player.restore_all_spells(2)
+			hud.post("You swallow a pill... Surge! (+2 charges to all spells)")
+		2:
+			player.spell_points += 2
+			hud.post("You swallow a pill... Insight! (+2 SP)")
+		3:
+			player.heal(12)
+			hud.post("You swallow a pill... Vigor! (+12 HP)")
+		4:
+			var sickness := mini(4, player.stats.hp - 1)
+			if sickness > 0:
+				_apply_damage_to_actor(player, sickness, Color(0.6, 0.9, 0.3))
+			hud.post("You swallow a pill... Nausea! (-%d HP)" % maxi(0, sickness))
+		_:
+			player.apply_status(POISON_STATUS, 2)
+			hud.post("You swallow a pill... Toxins! You are poisoned.")
 
 
 func _walk(path: Array[Vector2i]) -> void:
@@ -1186,13 +1321,71 @@ func _pickup() -> bool:
 # --- combat & room clear --------------------------------------------------
 
 func _apply_damage_to_actor(defender: Actor, amount: int, color := Color(1, 0.3, 0.3)) -> int:
+	var phoenix_before := defender.phoenix_charges
 	var actual := defender.take_damage(amount, color)
 	if defender == player:
 		if actual == 0 and amount > 0:
 			hud.post("🛡 Holy Mantle blocks the hit!")
 		else:
 			_room_damage_taken += actual
+		if defender.phoenix_charges < phoenix_before:
+			grid.play_spell_vfx(grid.cells_in_radius(defender.cell, 2, true), Color(1.0, 0.8, 0.2))
+			hud.post("🔥 The Phoenix Feather burns away — you rise again with %d HP!" % defender.stats.hp)
 	return actual
+
+
+func _apply_on_hit_statuses(attacker: Actor, defender: Actor) -> void:
+	if defender.is_dead():
+		return
+	var sources: Array[Dictionary] = []
+	if attacker.on_hit_status != null:
+		sources.append({"status": attacker.on_hit_status, "duration": attacker.on_hit_status_duration})
+	if attacker.weapon != null and attacker.weapon.on_hit_status != null:
+		sources.append({"status": attacker.weapon.on_hit_status, "duration": attacker.weapon.on_hit_status_duration})
+	for r in attacker.relics:
+		if r.on_hit_status != null:
+			sources.append({"status": r.on_hit_status, "duration": r.on_hit_status_duration})
+	for src in sources:
+		var status: StatusData = src["status"]
+		var duration: int = int(src["duration"]) + attacker.total_status_duration_bonus()
+		var extra_dot := attacker.total_burn_damage_bonus() if status.id == "burn" else 0
+		defender.apply_status(status, duration, extra_dot)
+
+
+func _ukulele_zap(origin: Actor, stacks: int) -> void:
+	var zap_color := Color(1.0, 0.92, 0.35)
+	var zap_damage := 4 + player.total_spell_damage_bonus() / 2
+	var points: Array[Vector2] = [grid.cell_to_pixel(origin.cell)]
+	var cells: Array[Vector2i] = []
+	var hit_list: Array[Actor] = [origin]
+	var victims: Array[Actor] = []
+	var current := origin.cell
+	for _i in 2 + stacks:
+		var best: Actor = null
+		var best_dist := 4
+		for m in monsters:
+			if m.is_allies or m.is_dead() or hit_list.has(m):
+				continue
+			var d := m.distance_to_cell(current)
+			if d < best_dist:
+				best_dist = d
+				best = m
+		if best == null:
+			break
+		hit_list.append(best)
+		points.append(grid.cell_to_pixel(best.cell))
+		cells.append(best.cell)
+		current = best.cell
+		best.take_damage(int(ceil(float(zap_damage) * best.incoming_damage_multiplier())), zap_color)
+		best.apply_status(SHOCK_STATUS, 2 + player.total_status_duration_bonus())
+		victims.append(best)
+	if cells.is_empty():
+		return
+	grid.play_spell_vfx(cells, zap_color, points)
+	hud.post("⚡ Ukulele! Chain lightning leaps to %d more foe(s) for %d each." % [cells.size(), zap_damage])
+	for m in victims:
+		if m.is_dead():
+			_handle_monster_death(m)
 
 
 func _attack(attacker: Actor, defender: Actor) -> void:
@@ -1213,12 +1406,17 @@ func _attack(attacker: Actor, defender: Actor) -> void:
 		shatter_note,
 	])
 	if not defender.is_dead():
-		return
-	if defender == player:
+		_apply_on_hit_statuses(attacker, defender)
+	elif defender == player:
 		_dead = true
 		hud.post("You die. Press R to start over.")
+		return
 	else:
 		_handle_monster_death(defender)
+	if attacker == player:
+		var ukulele_stacks := player.count_relic(ItemData.RelicEffect.UKULELE)
+		if ukulele_stacks > 0 and _rng.randf() < 0.3 * ukulele_stacks:
+			_ukulele_zap(defender, ukulele_stacks)
 
 
 func _handle_monster_death(defender: Actor) -> void:
@@ -1244,7 +1442,13 @@ func _handle_monster_death(defender: Actor) -> void:
 		bonus_notes.append("+%d SP" % sp_gain)
 	if blood_heal > 0:
 		bonus_notes.append("+%d HP" % blood_heal)
+	var soul_stacks := player.count_relic(ItemData.RelicEffect.SOUL_VESSEL)
+	if soul_stacks > 0 and _kills % 4 == 0:
+		player.stats.max_hp += soul_stacks
+		player.heal(soul_stacks)
+		bonus_notes.append("Soul Vessel +%d Max HP" % soul_stacks)
 	var note_str := " (%s)" % ", ".join(bonus_notes) if not bonus_notes.is_empty() else ""
+	var luck := 1.0 + 0.5 * player.count_relic(ItemData.RelicEffect.LUCKY_PENNY)
 
 	if defender.is_boss:
 		hud.post("★ BOSS VANQUISHED: %s falls!%s Dropped a Relic and Mana Potion!" % [defender.display_name, note_str])
@@ -1260,13 +1464,96 @@ func _handle_monster_death(defender: Actor) -> void:
 	else:
 		hud.post("%s is destroyed!%s" % [defender.display_name, note_str] if defender.is_spawner else "%s dies.%s" % [defender.display_name, note_str])
 		if _item_at(defender.cell) == null:
-			if defender.is_spawner and _rng.randf() < 0.25:
+			if defender.is_spawner and _rng.randf() < 0.25 * luck:
 				_spawn_item(_random_relic(), defender.cell)
-			elif _rng.randf() < defender.loot_chance:
+			elif defender.is_elite and _rng.randf() < 0.3 * luck:
+				_spawn_item(_random_relic(), defender.cell)
+			elif _rng.randf() < defender.loot_chance * luck:
 				_spawn_item(_random_item(), defender.cell)
 
+	var death_cell := defender.cell
+	var death_color := defender.color
+	var death_blast_damage := defender.death_blast_damage
+	var death_blast_radius := defender.death_blast_radius
+	var split_scene := defender.death_spawn_scene
+	var split_count := defender.death_spawn_count
 	defender.queue_free()
+
+	_trigger_kill_relics(death_cell)
+	if split_scene != null:
+		_split_on_death(split_scene, split_count, death_cell)
+	if death_blast_damage > 0:
+		_death_explosion(death_cell, death_blast_radius, death_blast_damage, death_color)
 	_check_room_cleared()
+
+
+func _trigger_kill_relics(death_cell: Vector2i) -> void:
+	var gas_stacks := player.count_relic(ItemData.RelicEffect.GASOLINE)
+	if gas_stacks > 0:
+		var ignited := 0
+		for m in monsters:
+			if m.is_allies or m.is_dead() or m.distance_to_cell(death_cell) > gas_stacks:
+				continue
+			m.apply_status(BURN_STATUS, 2 + gas_stacks + player.total_status_duration_bonus(), player.total_burn_damage_bonus())
+			ignited += 1
+		if ignited > 0:
+			grid.play_spell_vfx(grid.cells_in_radius(death_cell, gas_stacks, true), Color(1.0, 0.55, 0.15))
+			hud.post("Gasoline ignites! %d nearby foe(s) catch fire." % ignited)
+
+	var bandolier_stacks := player.count_relic(ItemData.RelicEffect.BANDOLIER)
+	if bandolier_stacks > 0 and _rng.randf() < 0.35 * bandolier_stacks:
+		var neediest: SpellData = null
+		var lowest_ratio := 1.0
+		for s in player.spells:
+			var ratio := float(s.charges) / float(s.effective_max_charges())
+			if ratio < lowest_ratio:
+				lowest_ratio = ratio
+				neediest = s
+		if neediest != null:
+			neediest.restore_charges(1)
+			hud.post("Bandolier: +1 charge on %s." % neediest.display_name)
+
+
+func _split_on_death(scene: PackedScene, count: int, origin: Vector2i) -> void:
+	var spots: Array[Vector2i] = []
+	for n in grid.walkable_neighbors(origin):
+		if grid.is_in_current_room(n) and not _is_occupied(n):
+			spots.append(n)
+	if not _is_occupied(origin):
+		spots.append(origin)
+	spots.shuffle()
+	var spawned := 0
+	for spot in spots:
+		if spawned >= count:
+			break
+		monsters.append(_spawn_actor(scene, spot))
+		spawned += 1
+	if spawned > 0:
+		grid.play_spell_vfx(spots.slice(0, spawned), Color(0.5, 0.9, 0.55))
+		hud.post("It splits into %d smaller creature(s)!" % spawned)
+
+
+func _death_explosion(origin: Vector2i, blast_radius: int, blast_damage: int, blast_color: Color) -> void:
+	var blast_cells := grid.cells_in_radius(origin, blast_radius, true)
+	grid.play_spell_vfx(blast_cells, blast_color)
+	var victims: Array[Actor] = []
+	for m in monsters:
+		if m.is_dead() or m.distance_to_cell(origin) > blast_radius:
+			continue
+		m.take_damage(blast_damage, blast_color)
+		victims.append(m)
+	var player_hit := false
+	if HexGrid.distance(player.cell, origin) <= blast_radius:
+		var dealt := _apply_damage_to_actor(player, maxi(1, blast_damage - player.total_defense()), blast_color)
+		player_hit = dealt > 0
+		if player.is_dead():
+			_dead = true
+			hud.post("You are caught in the blast. Press R to start over.")
+	if player_hit or not victims.is_empty():
+		hud.post("💥 The explosion tears through everything nearby!")
+	for m in victims:
+		if m.is_dead():
+			_handle_monster_death(m)
 
 
 func _check_room_cleared() -> void:
@@ -1318,6 +1605,7 @@ func _nearest_enemy_for(actor: Actor) -> Actor:
 func _monsters_act() -> void:
 	if _process_actor_statuses(player):
 		return
+	player.tick_skip_turn_statuses()
 	var tween: Tween
 	var acting_monsters: Array[Actor] = monsters.duplicate()
 	for m in acting_monsters:
@@ -1454,7 +1742,21 @@ func _boss_act(boss: Actor) -> Tween:
 		_attack(boss, target)
 		return null
 
-	# 5. March 1 step toward the player, crushing interior cave walls under its 7-hex body.
+	# 4b. Ranged bosses (attack_range > 1) open fire when they have a clear line.
+	if target != null and boss.attack_range > 1 and boss.distance_to_cell(target.cell) <= boss.attack_range and grid.has_line_of_sight(boss.cell, target.cell):
+		_ranged_monster_attack(boss, target)
+		return null
+
+	# 5a. Single-hex bosses walk normally instead of tunnelling through walls.
+	if boss.footprint_radius == 0:
+		if target == null:
+			return null
+		var walk_step := _monster_step_toward(boss, target, true)
+		if walk_step != boss.cell:
+			return boss.move_to(walk_step, STEP_TIME)
+		return null
+
+	# 5b. March 1 step toward the player, crushing interior cave walls under its 7-hex body.
 	var best_step := boss.cell
 	var best_dist := HexGrid.distance(boss.cell, player.cell)
 	for d in HexGrid.DIRECTIONS:
@@ -1508,10 +1810,13 @@ func _ranged_monster_attack(attacker: Actor, defender: Actor) -> void:
 	var arc: Array[Vector2] = [grid.cell_to_pixel(attacker.cell), grid.cell_to_pixel(defender.cell)]
 	grid.play_spell_vfx([defender.cell], attacker.color, arc)
 	var damage := maxi(1, attacker.total_attack() - defender.total_defense() + _rng.randi_range(-1, 1))
+	damage = int(ceil(float(damage) * defender.incoming_damage_multiplier()))
+	defender.consume_shatter_statuses()
 	var dealt := _apply_damage_to_actor(defender, damage, attacker.color)
 	if defender == player and dealt == 0:
 		return
 	hud.post("%s blasts %s from afar for %d." % [attacker.display_name, defender.display_name.to_lower(), dealt])
+	_apply_on_hit_statuses(attacker, defender)
 	if defender.is_dead():
 		if defender == player:
 			_dead = true
@@ -1524,6 +1829,8 @@ func _process_actor_statuses(actor: Actor) -> bool:
 	if actor.statuses.is_empty():
 		return false
 	for i in range(actor.statuses.size() - 1, -1, -1):
+		if i >= actor.statuses.size():
+			continue
 		var st := actor.statuses[i]
 		if st.skips_turn:
 			continue
@@ -1533,7 +1840,7 @@ func _process_actor_statuses(actor: Actor) -> bool:
 			if dealt > 0:
 				hud.post("%s takes %d %s damage." % [actor.display_name, dealt, st.display_name.to_lower()])
 		if st.turns_left <= 0:
-			actor.statuses.remove_at(i)
+			actor.statuses.erase(st)
 		actor.queue_redraw()
 		if actor.is_dead():
 			if actor == player:

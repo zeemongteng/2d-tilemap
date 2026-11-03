@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Lucky Penny"
+description = "Heads you win. Foes are 50% more likely to drop loot, and relics appear more often. Stacks."
+glyph = "?"
+color = Color(0.95, 0.85, 0.4, 1)
+type = 5
+relic_effect = 19
+

@@ -1,0 +1,23 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://actor.gd" id="1_actor"]
+[ext_resource type="Script" path="res://stats.gd" id="2_stats"]
+[ext_resource type="PackedScene" path="res://monsters/slime.tscn" id="3_slime"]
+
+[sub_resource type="Resource" id="Resource_stats"]
+script = ExtResource("2_stats")
+max_hp = 12
+attack = 0
+defense = 0
+
+[node name="SlimePit" type="Node2D"]
+script = ExtResource("1_actor")
+display_name = "The slime pit"
+description = "Bubbling pool of ooze that births a slime every 5 turns."
+glyph = "U"
+color = Color(0.35, 0.8, 0.4, 1)
+stats = SubResource("Resource_stats")
+loot_chance = 0.8
+is_spawner = true
+spawn_interval = 5
+spawn_scene = ExtResource("3_slime")

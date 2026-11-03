@@ -1,0 +1,21 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://actor.gd" id="1_actor"]
+[ext_resource type="Script" path="res://stats.gd" id="2_stats"]
+
+[sub_resource type="Resource" id="Resource_stats"]
+script = ExtResource("2_stats")
+max_hp = 6
+attack = 3
+defense = 0
+
+[node name="SkeletonArcher" type="Node2D"]
+script = ExtResource("1_actor")
+display_name = "The skeleton archer"
+description = "Brittle bones clutching a warped bow. Looses arrows from up to 4 hexes away."
+glyph = "a"
+color = Color(0.9, 0.88, 0.7, 1)
+stats = SubResource("Resource_stats")
+loot_chance = 0.4
+attack_range = 4
+min_room = 2

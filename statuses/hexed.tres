@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="StatusData" format=3]
+
+[ext_resource type="Script" path="res://status_data.gd" id="1_status"]
+
+[resource]
+script = ExtResource("1_status")
+id = "hexed"
+display_name = "Hexed"
+description = "Marked by a curse. Takes +50% damage from all attacks."
+badge_glyph = "x"
+color = Color(0.72, 0.35, 0.95, 1)
+default_duration = 3
+incoming_damage_multiplier = 1.5
+

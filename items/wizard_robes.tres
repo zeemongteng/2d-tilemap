@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Wizard Robes"
+description = "Star-stitched silk that thrums with latent magic. Light protection, but it sharpens all your spells."
+glyph = "]"
+color = Color(0.55, 0.5, 0.95, 1)
+type = 1
+defense_bonus = 1
+spell_damage_bonus = 2

@@ -12,6 +12,8 @@ enum Type {
 	ANGEL_PORTAL,
 	RETURN_PORTAL,
 	SPELL_PEDESTAL,
+	BOMB,
+	PILL,
 }
 
 enum RelicEffect {
@@ -27,6 +29,15 @@ enum RelicEffect {
 	VAMPIRIC_MAW,
 	SACRED_HEART,
 	HOLY_MANTLE,
+	GLASS_CANNON,
+	PHOENIX_FEATHER,
+	GASOLINE,
+	VENOM_FANG,
+	BANDOLIER,
+	SOUL_VESSEL,
+	UKULELE,
+	LUCKY_PENNY,
+	HAWKS_LENS,
 }
 
 @export var display_name := "Item"
@@ -48,6 +59,23 @@ enum RelicEffect {
 @export var hp_cost := 0
 @export var granted_spell: SpellData
 @export var relic_effect := RelicEffect.NONE
+## Status inflicted on foes by the wielder's melee hits (weapons and relics).
+@export var on_hit_status: StatusData
+@export var on_hit_status_duration := 3
+## Bombs: damage dealt to every foe within blast_radius hexes of the user.
+@export var blast_damage := 0
+@export var blast_radius := 1
+
+
+func gear_extras() -> String:
+	var parts: Array[String] = []
+	if spell_damage_bonus != 0:
+		parts.append("%+d Spell DMG" % spell_damage_bonus)
+	if on_hit_status != null:
+		parts.append("inflicts %s" % on_hit_status.display_name)
+	if parts.is_empty():
+		return ""
+	return "  •  " + ", ".join(parts)
 
 
 func describe() -> String:
@@ -64,6 +92,10 @@ func describe() -> String:
 			return "? %s" % display_name
 		Type.SPELL_PEDESTAL:
 			return "★ Spell: %s" % display_name
+		Type.BOMB:
+			return "%s (%d DMG blast)" % [display_name, blast_damage]
+		Type.PILL:
+			return "%s (???)" % display_name
 		_:
 			return "%s (heals %d)" % [display_name, heal_amount]
 
@@ -71,11 +103,17 @@ func describe() -> String:
 func type_name() -> String:
 	match type:
 		Type.WEAPON:
-			return "Weapon  •  +%d ATK" % attack_bonus
+			return "Weapon  •  +%d ATK%s" % [attack_bonus, gear_extras()]
 		Type.ARMOR:
-			return "Armor  •  +%d DEF" % defense_bonus
+			return "Armor  •  +%d DEF%s" % [defense_bonus, gear_extras()]
+		Type.BOMB:
+			return "Consumable  •  %d DMG to all foes within %d hex" % [blast_damage, blast_radius]
+		Type.PILL:
+			return "Consumable  •  Unknown effect — gamble!"
 		Type.MANA_POTION:
 			return "Consumable  •  +%d Spell Charges" % charge_restore
+		Type.POTION when max_hp_bonus > 0:
+			return "Consumable  •  Restores %d HP, +%d Max HP" % [heal_amount, max_hp_bonus]
 		Type.SPELL_ORB:
 			return "Artifact  •  +%d Spell Points" % sp_amount
 		Type.RELIC:

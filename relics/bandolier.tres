@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Bandolier"
+description = "Leather belt of scavenged reagent vials. Every foe that dies has a 35% chance to recharge 1 charge on your most depleted spell. Stacks."
+glyph = "?"
+color = Color(0.75, 0.6, 0.35, 1)
+type = 5
+relic_effect = 16
+

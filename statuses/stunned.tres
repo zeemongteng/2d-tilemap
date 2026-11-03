@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="StatusData" format=3]
+
+[ext_resource type="Script" path="res://status_data.gd" id="1_status"]
+
+[resource]
+script = ExtResource("1_status")
+id = "stun"
+display_name = "Stunned"
+description = "Dazed and reeling. Skips its next turn."
+badge_glyph = "!"
+color = Color(0.95, 0.85, 0.6, 1)
+default_duration = 1
+skips_turn = true
+

@@ -1,0 +1,19 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://actor.gd" id="1_actor"]
+[ext_resource type="Script" path="res://stats.gd" id="2_stats"]
+
+[sub_resource type="Resource" id="Resource_stats"]
+script = ExtResource("2_stats")
+max_hp = 3
+attack = 2
+defense = 0
+
+[node name="Slimelet" type="Node2D"]
+script = ExtResource("1_actor")
+display_name = "The slimelet"
+description = "A wobbling blob split off from a bigger slime."
+glyph = "b"
+color = Color(0.5, 0.9, 0.55, 1)
+font_size = 20
+stats = SubResource("Resource_stats")

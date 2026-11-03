@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Ukulele"
+description = "A tiny, deafening instrument. Your melee hits have a 30% chance to unleash chain lightning (4 dmg, shocks) that leaps to nearby foes. Stacks."
+glyph = "?"
+color = Color(1, 0.92, 0.35, 1)
+type = 5
+relic_effect = 18
+
