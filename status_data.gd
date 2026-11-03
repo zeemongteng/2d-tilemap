@@ -15,6 +15,8 @@ extends Resource
 @export var blocks_regen := false
 @export var incoming_damage_multiplier := 1.0
 @export var shatters_on_hit := false
+@export var charms_actor := false
+@export var fears_actor := false
 @export var cancels_status_ids: PackedStringArray = []
 
 var turns_left := 0

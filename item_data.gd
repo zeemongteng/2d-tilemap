@@ -10,6 +10,7 @@ enum Type {
 	RELIC,
 	DEVIL_PORTAL,
 	ANGEL_PORTAL,
+	TREASURE_PORTAL,
 	RETURN_PORTAL,
 	SPELL_PEDESTAL,
 	BOMB,
@@ -128,6 +129,8 @@ func type_name() -> String:
 			return "Devil Room Portal (Earned via Speed-Clear!)"
 		Type.ANGEL_PORTAL:
 			return "Angel Room Portal (Earned via Flawless Clear!)"
+		Type.TREASURE_PORTAL:
+			return "Golden Treasure Room Portal"
 		Type.RETURN_PORTAL:
 			return "Sanctuary Exit Portal"
 		_:

@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="SpellData" format=3 uid="uid://dpl4wvs24n75o"]
+
+[ext_resource type="Script" uid="uid://0cvw3h2cs682" path="res://spell_data.gd" id="1_spell"]
+[ext_resource type="Resource" uid="uid://bmoqh25xhxuw" path="res://statuses/fear.tres" id="2_fear"]
+
+[resource]
+script = ExtResource("1_spell")
+display_name = "Dread Howl"
+description = "Unleashes a terrifying shockwave around you that damages nearby enemies and sends them fleeing in Fear for 3 turns."
+element = 5
+pattern = 5
+color = Color(0.75, 0.38, 1, 1)
+max_charges = 4
+cast_range = 0
+radius = 2
+damage = 3
+status_effect = ExtResource("2_fear")
+status_duration = 3
+requires_los = false
+bonus_charges_per_level = 1
+bonus_range_per_level = 0
+bonus_radius_per_level = 1

@@ -125,18 +125,24 @@ func is_any_modal_open() -> bool:
 	return spellbook_modal.visible or confirm_modal.visible or debug_modal.visible
 
 
-func prompt_next_room(next_room_num: int, edge_cell: Vector2i, is_boss_room := false, boss_name := "") -> void:
+func prompt_next_room(next_room_num: int, edge_cell: Vector2i, is_boss_room := false, boss_name := "", is_treasure_room := false) -> void:
 	_pending_edge_cell = edge_cell
 	hide_popup()
-	if is_boss_room:
+	if is_treasure_room:
+		confirm_title.text = "⚜ GOLDEN TREASURE ROOM ⚜"
+		confirm_title.modulate = Color(1.0, 0.88, 0.28)
+		confirm_text.text = "A shimmering golden doorway beckons!\nEnter the adjacent Treasure Vault to claim a free Relic or Spell?"
+		yes_button.text = "[Y / Enter] Enter Treasure Room"
+	elif is_boss_room:
 		confirm_title.text = "⚠ BOSS LAIR — ENTER ROOM %d? ⚠" % next_room_num
 		confirm_title.modulate = Color(1.0, 0.38, 0.38)
 		confirm_text.text = "Tremors shake the cavern beyond this doorway.\n%s awaits in Room %d!" % [boss_name if not boss_name.is_empty() else "A boss", next_room_num]
+		yes_button.text = "[Y / Enter] Enter Room %d" % next_room_num
 	else:
 		confirm_title.text = "ENTER ROOM %d?" % next_room_num
 		confirm_title.modulate = Color(0.45, 1.0, 0.6)
 		confirm_text.text = "You have reached the edge of the room.\nGenerate and enter Room %d in this direction?" % next_room_num
-	yes_button.text = "[Y / Enter] Enter Room %d" % next_room_num
+		yes_button.text = "[Y / Enter] Enter Room %d" % next_room_num
 	confirm_modal.visible = true
 
 
@@ -198,11 +204,22 @@ func show_spell_popup(spell: SpellData, from_ui := true) -> void:
 	popup_title.text = "%s (Lv.%d/%d)" % [spell.display_name, spell.level, spell.max_level]
 	popup_title.modulate = spell.color.lerp(Color.WHITE, 0.35)
 	var range_part := "  •  Rng %d" % eff_rng if eff_rng > 0 else ""
-	var dmg_part := "Summon Ally" if spell.pattern == SpellData.Pattern.SUMMON else "%d DMG" % (spell.effective_damage() + bonus_dmg)
-	popup_subtitle.text = "%s  •  %s  •  %s%s  •  %d/%d Charges" % [
+	var dmg_part := ""
+	if spell.pattern == SpellData.Pattern.SUMMON:
+		dmg_part = "Summon Ally"
+	elif spell.pattern == SpellData.Pattern.DASH:
+		dmg_part = "Evade Attacks"
+	else:
+		dmg_part = "%d DMG" % (spell.effective_damage() + bonus_dmg)
+	var resource_part := ""
+	if spell.uses_cooldown():
+		resource_part = "Ready (%dt CD)" % spell.effective_cooldown() if spell.cooldown_remaining <= 0 else "Cooldown: %d/%dt" % [spell.cooldown_remaining, spell.effective_cooldown()]
+	else:
+		resource_part = "%d/%d Charges" % [spell.charges, spell.effective_max_charges()]
+	popup_subtitle.text = "%s  •  %s  •  %s%s  •  %s" % [
 		spell.element_name(), spell.pattern_name(),
 		dmg_part, range_part,
-		spell.charges, spell.effective_max_charges()
+		resource_part
 	]
 	popup_body.text = spell.description
 	info_popup.reset_size()
@@ -217,6 +234,10 @@ func show_actor_popup(actor: Actor) -> void:
 	var boss_tag := ""
 	if actor.is_boss:
 		boss_tag = " [BOSS • 7-HEX]" if actor.footprint_radius > 0 else " [BOSS]"
+		if actor.is_enraged:
+			boss_tag += " [ENRAGED]"
+	elif actor.was_charmed_enemy:
+		boss_tag = " [CHARMED ALLY]"
 	elif actor.is_elite:
 		boss_tag = " [ELITE]"
 	elif actor.is_allies:
@@ -298,6 +319,8 @@ func refresh(
 	var weapon := player.weapon.describe() if player.weapon != null else "none"
 	var armor := player.armor.describe() if player.armor != null else "none"
 	var status_parts: Array[String] = []
+	if player.evade_turns > 0:
+		status_parts.append("Evasion (Dodging)")
 	if player.holy_mantle_shield:
 		status_parts.append("Holy Mantle Shield")
 	if player.has_any_status():
@@ -318,9 +341,10 @@ func refresh(
 
 	if active_boss != null and is_instance_valid(active_boss) and not active_boss.is_dead():
 		boss_panel.visible = true
+		var enrage_tag := " 🔥 ENRAGED" if active_boss.is_enraged else ""
 		var boss_status := "  [%s]" % active_boss.describe_statuses() if active_boss.has_any_status() else ""
-		boss_title.text = "%s %s — %d / %d HP%s" % [
-			active_boss.glyph, active_boss.display_name.to_upper(),
+		boss_title.text = "%s %s%s — %d / %d HP%s" % [
+			active_boss.glyph, active_boss.display_name.to_upper(), enrage_tag,
 			active_boss.stats.hp, active_boss.stats.max_hp, boss_status
 		]
 		boss_hp_bar.max_value = active_boss.stats.max_hp
@@ -350,9 +374,15 @@ func _rebuild_spells(player: Actor, active_spell_idx: int) -> void:
 		btn.focus_mode = Control.FOCUS_NONE
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		var active_prefix := ">> " if i == active_spell_idx else ""
-		var stat_suffix := "SUMMON" if spell.pattern == SpellData.Pattern.SUMMON else "%d DMG" % (spell.effective_damage() + bonus_dmg)
+		var stat_suffix := ""
+		if spell.pattern == SpellData.Pattern.SUMMON:
+			stat_suffix = "SUMMON"
+		elif spell.pattern == SpellData.Pattern.DASH:
+			stat_suffix = "DODGE"
+		else:
+			stat_suffix = "%d DMG" % (spell.effective_damage() + bonus_dmg)
 		btn.text = "%s%s  •  %s" % [active_prefix, spell.describe_button(key_label), stat_suffix]
-		if spell.charges <= 0:
+		if not spell.is_ready():
 			btn.modulate = Color(0.55, 0.55, 0.55)
 		elif i == active_spell_idx:
 			btn.modulate = Color(1.0, 0.92, 0.45)
@@ -512,8 +542,10 @@ func _rebuild_debug_menu() -> void:
 		{"id": "kill_all", "label": "Kill All Hostiles (Clear)", "color": Color(1.0, 0.55, 0.45)},
 		{"id": "spawn_devil_portal", "label": "Spawn Devil Portal (ψ)", "color": Color(1.0, 0.35, 0.42)},
 		{"id": "spawn_angel_portal", "label": "Spawn Angel Portal (†)", "color": Color(1.0, 0.95, 0.55)},
+		{"id": "spawn_treasure_portal", "label": "Spawn Treasure Portal (⚜)", "color": Color(1.0, 0.85, 0.25)},
 		{"id": "enter_devil_room", "label": "Teleport → Devil Room", "color": Color(0.95, 0.3, 0.4)},
 		{"id": "enter_angel_room", "label": "Teleport → Angel Room", "color": Color(0.65, 0.9, 1.0)},
+		{"id": "enter_treasure_room", "label": "Teleport → Treasure Room", "color": Color(1.0, 0.85, 0.25)},
 		{"id": "exit_sanctuary", "label": "Return from Sanctuary (O)", "color": Color(0.75, 0.85, 1.0)},
 	]
 	for entry in quick_actions:

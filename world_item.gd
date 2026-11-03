@@ -23,7 +23,7 @@ func _draw() -> void:
 	if data == null:
 		return
 	var font := ThemeDB.fallback_font
-	if data.type in [ItemData.Type.DEVIL_PORTAL, ItemData.Type.ANGEL_PORTAL, ItemData.Type.RETURN_PORTAL]:
+	if data.type in [ItemData.Type.DEVIL_PORTAL, ItemData.Type.ANGEL_PORTAL, ItemData.Type.TREASURE_PORTAL, ItemData.Type.RETURN_PORTAL]:
 		draw_circle(Vector2.ZERO, FONT_SIZE * 0.72, Color(data.color.r, data.color.g, data.color.b, 0.22))
 		draw_arc(Vector2.ZERO, FONT_SIZE * 0.78, 0.0, TAU, 24, data.color, 2.5)
 		draw_arc(Vector2.ZERO, FONT_SIZE * 0.52, 0.0, TAU, 20, Color.WHITE, 1.4)

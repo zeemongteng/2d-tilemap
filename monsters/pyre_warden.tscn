@@ -1,7 +1,7 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://cbxfimrybkwod"]
 
-[ext_resource type="Script" path="res://actor.gd" id="1_actor"]
-[ext_resource type="Script" path="res://stats.gd" id="2_stats"]
+[ext_resource type="Script" uid="uid://b3q20tocghyqk" path="res://actor.gd" id="1_actor"]
+[ext_resource type="Script" uid="uid://dvf7ra767ki0v" path="res://stats.gd" id="2_stats"]
 [ext_resource type="PackedScene" path="res://monsters/fire_imp.tscn" id="3_imp"]
 [ext_resource type="Resource" path="res://statuses/burn.tres" id="4_burn"]
 
@@ -11,7 +11,7 @@ max_hp = 36
 attack = 5
 defense = 1
 
-[node name="PyreWarden" type="Node2D"]
+[node name="PyreWarden" type="Node2D" unique_id=1507446946]
 script = ExtResource("1_actor")
 display_name = "The Pyre Warden"
 description = "Infernal jailer wreathed in flame. Hurls burning bolts from 4 hexes away, summons fire imps, and telegraphs ground slams."

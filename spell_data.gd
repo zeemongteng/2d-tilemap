@@ -3,16 +3,19 @@ extends Resource
 ## Rift Wizard-style spell resource with charges, elemental types, AoE patterns, summoning, and SP upgrades.
 
 enum Element { FIRE, LIGHTNING, ICE, ARCANE, NATURE, DARK, HOLY }
-enum Pattern { SINGLE, BLAST, BEAM, CHAIN, BLINK, NOVA, SUMMON }
+enum Pattern { SINGLE, BLAST, BEAM, CHAIN, BLINK, NOVA, SUMMON, DASH }
 
 @export var display_name := "Spell"
 @export_multiline var description := ""
 @export var element := Element.FIRE
 @export var pattern := Pattern.SINGLE
 @export var color := Color(1.0, 0.45, 0.2)
+@export var is_innate := false
 
 @export_group("Stats")
 @export var max_charges := 5
+## When > 0, this skill uses a turn-based cooldown instead of charges.
+@export var cooldown_turns := 0
 @export var cast_range := 5
 @export var radius := 0
 @export var chain_jumps := 0
@@ -34,8 +37,10 @@ enum Pattern { SINGLE, BLAST, BEAM, CHAIN, BLINK, NOVA, SUMMON }
 @export var bonus_radius_per_level := 0
 @export var bonus_summon_hp_per_level := 4
 @export var bonus_summon_atk_per_level := 1
+@export var bonus_cooldown_reduction_per_level := 0
 
 var charges := 5
+var cooldown_remaining := 0
 var level := 1
 
 
@@ -43,7 +48,25 @@ func init_runtime() -> SpellData:
 	var copy := duplicate() as SpellData
 	copy.level = 1
 	copy.charges = copy.effective_max_charges()
+	copy.cooldown_remaining = 0
 	return copy
+
+
+func uses_cooldown() -> bool:
+	return cooldown_turns > 0
+
+
+func effective_cooldown() -> int:
+	return maxi(1, cooldown_turns - (level - 1) * bonus_cooldown_reduction_per_level)
+
+
+func is_ready() -> bool:
+	return cooldown_remaining <= 0 if uses_cooldown() else charges > 0
+
+
+func tick_cooldown() -> void:
+	if cooldown_remaining > 0:
+		cooldown_remaining = maxi(0, cooldown_remaining - 1)
 
 
 func effective_damage() -> int:
@@ -73,11 +96,16 @@ func upgrade() -> void:
 		return
 	var old_max := effective_max_charges()
 	level += 1
-	var gained := effective_max_charges() - old_max
-	charges = mini(effective_max_charges(), charges + maxi(1, gained))
+	if uses_cooldown():
+		cooldown_remaining = 0
+	else:
+		var gained := effective_max_charges() - old_max
+		charges = mini(effective_max_charges(), charges + maxi(1, gained))
 
 
 func restore_charges(amount: int) -> void:
+	if uses_cooldown():
+		return
 	charges = mini(effective_max_charges(), charges + amount)
 
 
@@ -116,10 +144,16 @@ func pattern_name() -> String:
 			return "Nova (r=%d)" % effective_radius()
 		Pattern.SUMMON:
 			return "Summon"
+		Pattern.DASH:
+			return "Dash & Dodge"
 	return "Spell"
 
 
 func describe_button(hotkey: String) -> String:
+	if uses_cooldown():
+		var cd_state := "READY • %dt CD" % effective_cooldown() if cooldown_remaining <= 0 else "CD: %dt" % cooldown_remaining
+		var key_tag := "D/%s" % hotkey if is_innate and hotkey != "D" else hotkey
+		return "[%s] %s Lv.%d  (%s)" % [key_tag, display_name, level, cd_state]
 	return "[%s] %s Lv.%d  (%d/%d)" % [
 		hotkey, display_name, level, charges, effective_max_charges()
 	]
@@ -131,6 +165,8 @@ func describe_details() -> String:
 	]
 	if pattern == Pattern.SUMMON:
 		parts.append("Summons Ally")
+	elif pattern == Pattern.DASH:
+		parts.append("Dodges Attacks (1t)")
 	elif effective_damage() > 0:
 		parts.append("%d DMG" % effective_damage())
 	if effective_range() > 0:
@@ -139,7 +175,10 @@ func describe_details() -> String:
 		parts.append("%s (%dt)" % [status_effect.display_name, status_duration])
 	if heal_per_hit > 0:
 		parts.append("Heals %d/hit" % heal_per_hit)
-	parts.append("%d Charges" % effective_max_charges())
+	if uses_cooldown():
+		parts.append("%dt Cooldown" % effective_cooldown())
+	else:
+		parts.append("%d Charges" % effective_max_charges())
 	var stats_line := "  •  ".join(parts)
 	if description.is_empty():
 		return stats_line

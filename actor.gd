@@ -45,8 +45,13 @@ var armor: ItemData
 
 var spawn_cooldown := 3
 var ability_cooldown := 2
+var ability2_cooldown := 3
+var telegraph_mode := 0
 var telegraph_cells: Array[Vector2i] = []
+var is_enraged := false
+var was_charmed_enemy := false
 var holy_mantle_shield := false
+var evade_turns := 0
 var phoenix_charges := 0
 var is_elite := false
 var elite_color := Color.WHITE
@@ -167,6 +172,7 @@ func add_relic(relic: ItemData) -> void:
 
 func refresh_room_shields() -> void:
 	holy_mantle_shield = has_relic(ItemData.RelicEffect.HOLY_MANTLE)
+	evade_turns = 0
 	queue_redraw()
 
 
@@ -187,6 +193,8 @@ func has_relic(effect: ItemData.RelicEffect) -> bool:
 func apply_status(template: StatusData, duration_override := -1, bonus_dot_damage := 0) -> void:
 	if template == null:
 		return
+	if template.charms_actor and is_boss:
+		return
 	for cancel_id in template.cancels_status_ids:
 		remove_status(cancel_id)
 	var dur := duration_override if duration_override > 0 else template.default_duration
@@ -197,6 +205,9 @@ func apply_status(template: StatusData, duration_override := -1, bonus_dot_damag
 			existing.damage_per_turn = maxi(existing.damage_per_turn, template.damage_per_turn + bonus_dot_damage)
 	else:
 		statuses.append(template.init_runtime(dur, bonus_dot_damage))
+	if template.charms_actor and not is_allies:
+		is_allies = true
+		was_charmed_enemy = true
 	queue_redraw()
 
 
@@ -215,10 +226,34 @@ func has_any_status() -> bool:
 	return not statuses.is_empty()
 
 
+func is_charmed() -> bool:
+	for s in statuses:
+		if s.charms_actor:
+			return true
+	return false
+
+
+func is_feared() -> bool:
+	for s in statuses:
+		if s.fears_actor:
+			return true
+	return false
+
+
+func sync_charm_allegiance() -> bool:
+	if was_charmed_enemy and not is_charmed():
+		is_allies = false
+		was_charmed_enemy = false
+		queue_redraw()
+		return true
+	return false
+
+
 func remove_status(status_id: String) -> void:
 	for i in range(statuses.size() - 1, -1, -1):
 		if statuses[i].id == status_id:
 			statuses.remove_at(i)
+	sync_charm_allegiance()
 	queue_redraw()
 
 
@@ -277,6 +312,11 @@ func is_dead() -> bool:
 
 
 func take_damage(amount: int, flash_color := Color(1, 0.3, 0.3)) -> int:
+	if evade_turns > 0 and amount > 0:
+		modulate = Color(0.5, 1.0, 0.9)
+		create_tween().tween_property(self, "modulate", Color.WHITE, 0.25)
+		queue_redraw()
+		return 0
 	if holy_mantle_shield and amount > 0:
 		holy_mantle_shield = false
 		modulate = Color(0.55, 0.95, 1.0)
@@ -323,7 +363,15 @@ func restore_all_spells(amount: int) -> void:
 
 func recharge_all_spells() -> void:
 	for s in spells:
-		s.charges = s.effective_max_charges()
+		if s.uses_cooldown():
+			s.cooldown_remaining = 0
+		else:
+			s.charges = s.effective_max_charges()
+
+
+func tick_spell_cooldowns() -> void:
+	for s in spells:
+		s.tick_cooldown()
 
 
 ## Equips a weapon or armor; the replaced piece goes back into the inventory.
@@ -364,13 +412,19 @@ func _draw() -> void:
 
 	if is_spawner:
 		draw_arc(Vector2.ZERO, font_size * 0.58, 0.0, TAU, 24, Color(draw_col.r, draw_col.g, draw_col.b, 0.45), 2.0)
+	elif was_charmed_enemy:
+		draw_arc(Vector2.ZERO, font_size * 0.54, 0.0, TAU, 20, Color(1.0, 0.45, 0.85, 0.85), 2.2)
 	elif is_allies and glyph != "@":
 		draw_arc(Vector2.ZERO, font_size * 0.52, 0.0, TAU, 20, Color(0.3, 0.95, 0.65, 0.55), 2.0)
+	if is_enraged:
+		draw_arc(Vector2.ZERO, font_size * 0.76, 0.0, TAU, 28, Color(1.0, 0.35, 0.15, 0.9), 2.5)
 	if is_elite:
 		draw_arc(Vector2.ZERO, font_size * 0.7, 0.0, TAU, 28, Color(elite_color.r, elite_color.g, elite_color.b, 0.9), 2.4)
 		draw_arc(Vector2.ZERO, font_size * 0.78, 0.0, TAU, 28, Color(elite_color.r, elite_color.g, elite_color.b, 0.4), 1.4)
 	if holy_mantle_shield:
 		draw_arc(Vector2.ZERO, font_size * 0.62, 0.0, TAU, 24, Color(0.55, 0.92, 1.0, 0.85), 2.2)
+	if evade_turns > 0:
+		draw_arc(Vector2.ZERO, font_size * 0.72, 0.0, TAU, 24, Color(0.45, 0.98, 0.9, 0.9), 2.2)
 
 	var offset := Vector2(-font_size, font_size * 0.35)
 	draw_string(font, offset, glyph, HORIZONTAL_ALIGNMENT_CENTER, font_size * 2.0, font_size, draw_col)

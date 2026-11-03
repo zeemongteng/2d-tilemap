@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="StatusData" format=3 uid="uid://bmoqh25xhxuw"]
+
+[ext_resource type="Script" uid="uid://cfhhu6oq67ii1" path="res://status_data.gd" id="1_status"]
+
+[resource]
+script = ExtResource("1_status")
+id = "fear"
+display_name = "Feared"
+description = "Terrified! Runs away from you each turn instead of attacking."
+badge_glyph = "¡"
+color = Color(0.75, 0.38, 1, 1)
+default_duration = 3
+fears_actor = true

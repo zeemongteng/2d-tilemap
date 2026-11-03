@@ -78,6 +78,8 @@
 [ext_resource type="Resource" path="res://items/greater_memory_orb.tres" id="77_gorb"]
 [ext_resource type="Resource" path="res://items/rift_bomb.tres" id="78_bomb"]
 [ext_resource type="Resource" path="res://items/mystery_pill.tres" id="79_pill"]
+[ext_resource type="Resource" path="res://spells/siren_song.tres" id="80_siren"]
+[ext_resource type="Resource" path="res://spells/dread_howl.tres" id="81_dread"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_game")
@@ -93,7 +95,7 @@ devil_pool = Array[Resource]([ExtResource("35_the_mark"), ExtResource("36_vampir
 angel_pool = Array[Resource]([ExtResource("37_sacred_heart"), ExtResource("38_holy_mantle"), ExtResource("34_divine_smite"), ExtResource("69_r_phoenix"), ExtResource("60_angel")])
 starting_items = Array[Resource]([ExtResource("12_mana"), ExtResource("11_potion")])
 starting_spells = Array[Resource]([ExtResource("14_fireball"), ExtResource("15_lightning"), ExtResource("16_icicle"), ExtResource("32_wolf_spell")])
-spell_catalog = Array[Resource]([ExtResource("14_fireball"), ExtResource("15_lightning"), ExtResource("16_icicle"), ExtResource("32_wolf_spell"), ExtResource("17_chain"), ExtResource("18_blink"), ExtResource("19_nova"), ExtResource("51_missile"), ExtResource("52_venom"), ExtResource("53_toxic"), ExtResource("54_hex"), ExtResource("55_raise"), ExtResource("56_blizzard"), ExtResource("57_golem")])
+spell_catalog = Array[Resource]([ExtResource("14_fireball"), ExtResource("15_lightning"), ExtResource("16_icicle"), ExtResource("32_wolf_spell"), ExtResource("17_chain"), ExtResource("18_blink"), ExtResource("19_nova"), ExtResource("51_missile"), ExtResource("52_venom"), ExtResource("53_toxic"), ExtResource("54_hex"), ExtResource("55_raise"), ExtResource("56_blizzard"), ExtResource("57_golem"), ExtResource("80_siren"), ExtResource("81_dread")])
 
 [node name="HexGrid" type="Node2D" parent="."]
 script = ExtResource("2_grid")

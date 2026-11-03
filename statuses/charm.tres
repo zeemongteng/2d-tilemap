@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="StatusData" format=3 uid="uid://6628xrnsgj20"]
+
+[ext_resource type="Script" uid="uid://cfhhu6oq67ii1" path="res://status_data.gd" id="1_status"]
+
+[resource]
+script = ExtResource("1_status")
+id = "charm"
+display_name = "Charmed"
+description = "Beguiled! Temporarily fights as your ally against other monsters until Charm wears off."
+badge_glyph = "♥"
+color = Color(1, 0.45, 0.85, 1)
+default_duration = 3
+charms_actor = true
