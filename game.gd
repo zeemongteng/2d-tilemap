@@ -11,7 +11,18 @@ const POISON_STATUS: StatusData = preload("res://statuses/poison.tres")
 const SHOCK_STATUS: StatusData = preload("res://statuses/shock.tres")
 const CHARM_STATUS: StatusData = preload("res://statuses/charm.tres")
 const FEAR_STATUS: StatusData = preload("res://statuses/fear.tres")
+const FREEZE_STATUS: StatusData = preload("res://statuses/freeze.tres")
+const STUN_STATUS: StatusData = preload("res://statuses/stunned.tres")
+const HEXED_STATUS: StatusData = preload("res://statuses/hexed.tres")
 const DASH_SPELL: SpellData = preload("res://spells/dash.tres")
+const SYNERGY_INFO := {
+	"Pyromaniac": "Gasoline + Cinder Heart: kill-fires spread 2 hexes farther and burn 2 turns longer.",
+	"Thunderstruck": "Ukulele + Storm Core: every spell you cast has a 50% chance to unleash a Ukulele zap.",
+	"Glass Phoenix": "Glass Cannon + Phoenix Feather: rising from death detonates a 20-damage shockwave (r3).",
+	"Bloodbath": "Vampiric Maw + Burning Blood: every kill heals 4 extra HP.",
+	"Plague Lord": "Venom Fang + Permafrost Ring: your poison lasts 3 turns longer and bites for 2 more.",
+	"Sniper's Mark": "Hawk's Lens + The Mark: spells deal +1 damage per hex of distance to the target (max +6).",
+}
 
 @export var player_scene: PackedScene
 @export var monster_scene: PackedScene
@@ -54,6 +65,7 @@ var _active_spell_index := -1
 var _rng := RandomNumberGenerator.new()
 var _min_room_cache: Dictionary = {}
 var _elite_affixes: Array[Dictionary] = []
+var _announced_synergies: Array[String] = []
 
 
 func _ready() -> void:
@@ -602,7 +614,8 @@ func _refresh_hud() -> void:
 		_active_boss(),
 		_room_turns,
 		_room_par_turns,
-		_room_damage_taken == 0
+		_room_damage_taken == 0,
+		_synergy_line()
 	)
 
 
@@ -816,13 +829,20 @@ func _on_spell_learn_requested(template: SpellData) -> void:
 	_refresh_hud()
 
 
-func _on_spell_upgrade_requested(spell: SpellData) -> void:
+func _on_spell_upgrade_requested(spell: SpellData, branch_id: String) -> void:
 	if _busy or _dead or not spell.can_upgrade() or player.spell_points < spell.upgrade_cost:
 		return
 	player.spell_points -= spell.upgrade_cost
-	spell.upgrade()
-	hud.post("Upgraded %s to Lv.%d!" % [spell.display_name, spell.level])
+	var chosen := spell.upgrade(branch_id)
+	hud.post("Upgraded %s to Lv.%d%s!" % [spell.display_name, spell.level, _branch_note(chosen)])
 	_refresh_hud()
+
+
+func _branch_note(branch_id: String) -> String:
+	var entry := SpellBranches.get_branch(branch_id)
+	if entry.is_empty():
+		return ""
+	return " — %s: %s" % [entry["name"], entry["desc"]]
 
 
 # --- Debug Spawner & Sandbox Menu -----------------------------------------
@@ -1042,8 +1062,8 @@ func _on_debug_spawn_spell_requested(spell: SpellData, grant_directly: bool) -> 
 	if grant_directly:
 		var existing := player.get_learned_spell(spell.display_name)
 		if existing != null and existing.can_upgrade():
-			existing.upgrade()
-			hud.post("[Debug] Upgraded %s to Lv.%d!" % [existing.display_name, existing.level])
+			var debug_branch := existing.upgrade()
+			hud.post("[Debug] Upgraded %s to Lv.%d%s!" % [existing.display_name, existing.level, _branch_note(debug_branch)])
 		else:
 			var learned := player.learn_spell(spell)
 			hud.post("[Debug] Learned %s (Lv.%d)!" % [learned.display_name, learned.level])
@@ -1093,7 +1113,7 @@ func _compute_spell_aoe(spell: SpellData, target_cell: Vector2i) -> Array[Vector
 		SpellData.Pattern.BEAM, SpellData.Pattern.DASH:
 			return grid.hex_line(player.cell, target_cell, true)
 		SpellData.Pattern.CHAIN:
-			return _compute_chain_cells(target_cell, spell.effective_radius(), spell.chain_jumps + spell.level - 1)
+			return _compute_chain_cells(target_cell, spell.effective_radius(), spell.effective_chain_jumps())
 		SpellData.Pattern.BLINK:
 			var pulse := grid.cells_in_radius(target_cell, spell.effective_radius(), true)
 			return pulse
@@ -1148,11 +1168,13 @@ func _cast_spell(spell: SpellData, target_cell: Vector2i) -> void:
 	grid.clear_spell_preview()
 
 	var free_cast := player.has_relic(ItemData.RelicEffect.ARCANE_PRISM) and _rng.randf() < 0.35
+	if not free_cast and spell.has_branch("gen_spellweaver") and _rng.randf() < 0.3:
+		free_cast = true
 	if spell.uses_cooldown():
 		spell.cooldown_remaining = 0 if free_cast else (spell.effective_cooldown() + 1)
 	elif not free_cast:
 		spell.charges = maxi(0, spell.charges - 1)
-	var free_note := " (Arcane Prism: free cast!)" if free_cast else ""
+	var free_note := " (free cast!)" if free_cast else ""
 
 	var aoe_cells := _compute_spell_aoe(spell, target_cell)
 	var arc_points: Array[Vector2] = []
@@ -1160,13 +1182,28 @@ func _cast_spell(spell: SpellData, target_cell: Vector2i) -> void:
 	if spell.pattern == SpellData.Pattern.DASH:
 		arc_points.append(grid.cell_to_pixel(player.cell))
 		arc_points.append(grid.cell_to_pixel(target_cell))
-		player.evade_turns = 1
+		var evade_len := 2 if spell.has_branch("dash_adrenaline") else 1
+		player.evade_turns = evade_len
 		player.queue_redraw()
 		var dash_vfx := grid.play_spell_vfx(aoe_cells, spell.color, arc_points)
 		await player.move_to(target_cell, STEP_TIME * 0.65).finished
 		_pickup()
-		var cd_note := " (Arcane Prism: 0t CD!)" if free_cast else " (%dt CD)" % spell.effective_cooldown()
-		hud.post("💨 You dash across the arena and gain Evasion for this turn!%s" % cd_note)
+		var cd_note := " (free cast: 0t CD!)" if free_cast else " (%dt CD)" % spell.effective_cooldown()
+		hud.post("💨 You dash across the arena and gain Evasion for %d turn(s)!%s" % [evade_len, cd_note])
+		if spell.has_branch("dash_blade"):
+			var cut_names: Array[String] = []
+			var cut_victims: Array[Actor] = []
+			var secondary_dash: Array[Actor] = []
+			for c in aoe_cells:
+				var cut := _monster_at(c)
+				if cut != null and not cut.is_allies and not cut_victims.has(cut):
+					cut_victims.append(cut)
+					cut_names.append(_spell_strike(spell, cut, 1, target_cell, secondary_dash))
+			if not cut_names.is_empty():
+				hud.post("🗡 Slipstream Blade slashes %s." % ", ".join(cut_names))
+			for v in cut_victims + secondary_dash:
+				if v.is_dead():
+					_handle_monster_death(v)
 		await dash_vfx.finished
 		await _advance_turn()
 		_check_edge_trigger()
@@ -1181,22 +1218,26 @@ func _cast_spell(spell: SpellData, target_cell: Vector2i) -> void:
 		await player.move_to(target_cell, STEP_TIME).finished
 		_pickup()
 		aoe_cells.erase(player.cell)
+		if spell.has_branch("blink_phase"):
+			player.evade_turns = 1
+			player.queue_redraw()
 
 	var vfx_tween := grid.play_spell_vfx(aoe_cells, spell.color, arc_points)
 
 	if spell.pattern == SpellData.Pattern.SUMMON:
-		var sum_scene := spell.summon_scene if spell.summon_scene != null else monster_scene
-		var ally := _spawn_actor(sum_scene, target_cell)
-		ally.is_allies = true
-		ally.stats.max_hp += (spell.level - 1) * spell.bonus_summon_hp_per_level
-		ally.stats.hp = ally.stats.max_hp
-		ally.stats.attack += (spell.level - 1) * spell.bonus_summon_atk_per_level + player.total_spell_damage_bonus()
-		ally.queue_redraw()
-		monsters.append(ally)
+		var ally := _spawn_summon(spell, target_cell)
 		hud.post("You cast %s, summoning %s (HP %d, ATK %d)!%s" % [
 			spell.display_name, ally.display_name.to_lower(),
 			ally.stats.max_hp, ally.total_attack(), free_note
 		])
+		if spell.has_branch("summon_pack"):
+			for n in grid.walkable_neighbors(target_cell):
+				if grid.is_in_current_room(n) and not _is_occupied(n):
+					var twin_ally := _spawn_summon(spell, n)
+					grid.play_spell_vfx([n], spell.color)
+					hud.post("Pack Tactics: a second %s answers the call!" % twin_ally.display_name.to_lower())
+					break
+		_apply_cast_riders(spell, 0)
 		await vfx_tween.finished
 		await _advance_turn()
 		return
@@ -1213,27 +1254,27 @@ func _cast_spell(spell: SpellData, target_cell: Vector2i) -> void:
 			else:
 				overlap_counts[m] = int(overlap_counts[m]) + 1
 
+	if spell.has_branch("single_twin"):
+		var twin: Actor = null
+		var twin_dist := 4
+		for m in monsters:
+			if m.is_allies or m.is_dead() or hit_monsters.has(m):
+				continue
+			var td := m.distance_to_cell(target_cell)
+			if td < twin_dist:
+				twin_dist = td
+				twin = m
+		if twin != null:
+			hit_monsters.append(twin)
+			overlap_counts[twin] = 1
+
 	var bonus_dmg := player.total_spell_damage_bonus()
-	var bonus_afflicted := player.total_afflicted_damage_bonus()
 	var bonus_dur := player.total_status_duration_bonus()
 	var bonus_burn := player.total_burn_damage_bonus()
+	var secondary_victims: Array[Actor] = []
 	for m in hit_monsters:
 		var overlaps: int = int(overlap_counts.get(m, 1))
-		var overlap_mult := 1.0 + 0.25 * float(overlaps - 1)
-		var dmg := spell.effective_damage() + bonus_dmg
-		if m.has_any_status():
-			dmg += bonus_afflicted
-		dmg = int(ceil(float(dmg) * overlap_mult * m.incoming_damage_multiplier()))
-		if spell.element == SpellData.Element.FIRE:
-			m.consume_shatter_statuses()
-		m.take_damage(dmg, spell.color)
-		if spell.status_effect != null and spell.status_duration > 0:
-			var extra_dot := bonus_burn if spell.status_effect.id == "burn" else 0
-			m.apply_status(spell.status_effect, spell.status_duration + bonus_dur, extra_dot)
-		if overlaps > 1:
-			hit_names.append("%s (%d, %d hexes!)" % [m.display_name.to_lower(), dmg, overlaps])
-		else:
-			hit_names.append("%s (%d)" % [m.display_name.to_lower(), dmg])
+		hit_names.append(_spell_strike(spell, m, overlaps, target_cell, secondary_victims))
 
 	if aoe_cells.has(player.cell) and (spell.effective_damage() > 0 or spell.status_effect != null):
 		if spell.effective_damage() > 0:
@@ -1245,20 +1286,34 @@ func _cast_spell(spell: SpellData, target_cell: Vector2i) -> void:
 			hit_names.append("yourself (%d!)" % dealt_self)
 		if not player.is_dead() and spell.status_effect != null and spell.status_duration > 0 and not spell.status_effect.charms_actor:
 			var extra_self_dot := bonus_burn if spell.status_effect.id == "burn" else 0
-			player.apply_status(spell.status_effect, spell.status_duration, extra_self_dot)
+			player.apply_status(spell.status_effect, spell.effective_status_duration(), extra_self_dot)
 
 	if hit_names.is_empty():
 		hud.post("You cast %s.%s" % [spell.display_name, free_note])
 	else:
 		hud.post("You cast %s, hitting %s.%s" % [spell.display_name, ", ".join(hit_names), free_note])
-		if spell.heal_per_hit > 0 and not hit_monsters.is_empty():
-			var drained := spell.heal_per_hit * hit_monsters.size()
+		if spell.effective_heal() > 0 and not hit_monsters.is_empty():
+			var drained := spell.effective_heal() * hit_monsters.size()
 			player.heal(drained)
 			hud.post("You drain %d HP from your victims." % drained)
 
+	var struck_zap_origin: Actor = null
 	for m in hit_monsters:
 		if m.is_dead():
 			_handle_monster_death(m)
+			if spell.has_branch("fire_cremate"):
+				var cremated := _foe_blast(m.cell, 1, 4 + bonus_dmg / 2, Color(1.0, 0.5, 0.15))
+				if cremated > 0:
+					hud.post("🔥 Cremation! The corpse erupts, scorching %d nearby foe(s)." % cremated)
+		elif struck_zap_origin == null:
+			struck_zap_origin = m
+	for m in secondary_victims:
+		if m.is_dead():
+			_handle_monster_death(m)
+
+	if struck_zap_origin != null and not struck_zap_origin.is_dead() and _has_synergy("Thunderstruck") and _rng.randf() < 0.5:
+		_ukulele_zap(struck_zap_origin, maxi(1, player.count_relic(ItemData.RelicEffect.UKULELE)))
+	_apply_cast_riders(spell, hit_monsters.size())
 
 	if player.is_dead():
 		_dead = true
@@ -1271,6 +1326,234 @@ func _cast_spell(spell: SpellData, target_cell: Vector2i) -> void:
 	await _advance_turn()
 	if spell.pattern == SpellData.Pattern.BLINK:
 		_check_edge_trigger()
+
+
+func _spawn_summon(spell: SpellData, cell: Vector2i) -> Actor:
+	var sum_scene := spell.summon_scene if spell.summon_scene != null else monster_scene
+	var ally := _spawn_actor(sum_scene, cell)
+	ally.is_allies = true
+	ally.stats.max_hp += spell.summon_hp_bonus()
+	ally.stats.hp = ally.stats.max_hp
+	ally.stats.attack += spell.summon_atk_bonus() + player.total_spell_damage_bonus()
+	ally.queue_redraw()
+	monsters.append(ally)
+	return ally
+
+
+func _foes_near(origin: Vector2i, near_radius: int, exclude: Actor = null) -> Array[Actor]:
+	var result: Array[Actor] = []
+	for f in monsters:
+		if f == exclude or not is_instance_valid(f) or f.is_allies or f.is_dead():
+			continue
+		if f.distance_to_cell(origin) <= near_radius:
+			result.append(f)
+	return result
+
+
+## Damages every hostile within `blast_radius` of `origin` (never allies or the player). Returns how many were hit.
+func _foe_blast(origin: Vector2i, blast_radius: int, blast_damage: int, blast_color: Color) -> int:
+	grid.play_spell_vfx(grid.cells_in_radius(origin, blast_radius, true), blast_color)
+	var victims := _foes_near(origin, blast_radius)
+	for f in victims:
+		f.take_damage(int(ceil(float(blast_damage) * f.incoming_damage_multiplier())), blast_color)
+	for f in victims:
+		if f.is_dead():
+			_handle_monster_death(f)
+	return victims.size()
+
+
+## Resolves damage, statuses, branch riders and elemental reactions of one spell hit. Returns the log fragment.
+func _spell_strike(spell: SpellData, m: Actor, overlaps: int, target_cell: Vector2i, secondary: Array[Actor]) -> String:
+	var bonus_dur := player.total_status_duration_bonus()
+	var bonus_burn := player.total_burn_damage_bonus()
+	var dmg := spell.effective_damage() + player.total_spell_damage_bonus() + player.element_mastery_bonus(spell)
+	if _has_synergy("Sniper's Mark"):
+		dmg += mini(6, m.distance_to_cell(player.cell))
+	if m.has_any_status():
+		dmg += player.total_afflicted_damage_bonus()
+	var mult := (1.0 + 0.25 * float(overlaps - 1)) * m.incoming_damage_multiplier()
+	var tags: Array[String] = []
+	if overlaps > 1:
+		tags.append("%d hexes!" % overlaps)
+	if spell.has_branch("gen_executioner") and m.stats.hp * 100 <= m.stats.max_hp * 35:
+		mult *= 2.0
+		tags.append("EXECUTE")
+	if spell.has_branch("blast_epicenter") and m.occupies_cell(target_cell):
+		mult *= 2.0
+		tags.append("EPICENTER")
+	var reaction := _spell_reaction(spell, m, secondary)
+	var final_dmg := int(ceil(float(dmg) * mult)) + int(reaction["bonus"])
+	for note in reaction["notes"]:
+		tags.append(str(note))
+
+	if spell.element == SpellData.Element.FIRE:
+		m.consume_shatter_statuses()
+	m.take_damage(final_dmg, spell.color)
+	if spell.status_effect != null and spell.effective_status_duration() > 0:
+		var extra_dot := bonus_burn if spell.status_effect.id == "burn" else 0
+		m.apply_status(spell.status_effect, spell.effective_status_duration() + bonus_dur, extra_dot)
+
+	if spell.has_branch("light_static"):
+		m.apply_status(SHOCK_STATUS, 2 + bonus_dur)
+	if spell.has_branch("light_thunder"):
+		m.apply_status(STUN_STATUS, 1)
+	if spell.has_branch("dark_curse"):
+		m.apply_status(HEXED_STATUS, 2 + bonus_dur)
+	if spell.has_branch("fire_spread"):
+		for f in _foes_near(m.cell, 1, m):
+			f.apply_status(BURN_STATUS, 2 + bonus_dur, bonus_burn)
+	if spell.has_branch("ice_whiteout"):
+		for f in _foes_near(m.cell, 1, m):
+			f.apply_status(FREEZE_STATUS, 1)
+
+	var tag_str := ", ".join(tags)
+	if tag_str.is_empty():
+		return "%s (%d)" % [m.display_name.to_lower(), final_dmg]
+	return "%s (%d, %s)" % [m.display_name.to_lower(), final_dmg, tag_str]
+
+
+## Elemental reactions: the spell's element against the target's current afflictions. Returns {bonus, notes}.
+func _spell_reaction(spell: SpellData, m: Actor, secondary: Array[Actor]) -> Dictionary:
+	var bonus := 0
+	var notes: Array[String] = []
+	var poison := m.get_status("poison")
+	var burn := m.get_status("burn")
+	var frozen := m.get_status("freeze")
+	var shock_len := 2 + player.total_status_duration_bonus()
+	match spell.element:
+		SpellData.Element.FIRE:
+			if poison != null:
+				var burst := poison.turns_left * 3
+				m.remove_status("poison")
+				bonus += burst
+				notes.append("TOXIC INFERNO +%d" % burst)
+			if frozen != null:
+				var steamed := 0
+				for f in _foes_near(m.cell, 1, m):
+					f.take_damage(int(ceil(4.0 * f.incoming_damage_multiplier())), Color(0.9, 0.95, 1.0))
+					f.apply_status(STUN_STATUS, 1)
+					secondary.append(f)
+					steamed += 1
+				notes.append("STEAM BURST x%d" % steamed if steamed > 0 else "STEAM BURST")
+		SpellData.Element.LIGHTNING:
+			if frozen != null:
+				bonus += 4
+				for f in _foes_near(m.cell, 2, m):
+					f.apply_status(SHOCK_STATUS, shock_len)
+				notes.append("SUPERCONDUCT +4")
+		SpellData.Element.ICE:
+			if burn != null:
+				m.remove_status("burn")
+				bonus += 5
+				notes.append("THERMAL SHOCK +5")
+		SpellData.Element.DARK:
+			if poison != null:
+				var rot := poison.turns_left * 2
+				bonus += rot
+				player.heal(2)
+				notes.append("NECROSIS +%d" % rot)
+		SpellData.Element.HOLY:
+			if m.statuses.size() >= 2:
+				var purge := 2 * m.statuses.size()
+				bonus += purge
+				notes.append("PURGE +%d" % purge)
+	if m.is_feared():
+		bonus += 2
+		notes.append("PANIC +2")
+	return {"bonus": bonus, "notes": notes}
+
+
+func _apply_cast_riders(spell: SpellData, foes_hit: int) -> void:
+	if spell.has_branch("arc_surge"):
+		var others: Array[SpellData] = []
+		for s in player.spells:
+			if s != spell:
+				others.append(s)
+		if not others.is_empty():
+			var pick := others[_rng.randi_range(0, others.size() - 1)]
+			if pick.uses_cooldown():
+				pick.cooldown_remaining = maxi(0, pick.cooldown_remaining - 1)
+			else:
+				pick.restore_charges(1)
+			hud.post("✦ Arcane Surge refunds %s." % pick.display_name)
+	if spell.has_branch("holy_aegis") and not player.holy_mantle_shield:
+		player.holy_mantle_shield = true
+		player.queue_redraw()
+		hud.post("✦ Aegis: a Holy Mantle shield envelops you.")
+	if spell.has_branch("nova_cascade") and foes_hit >= 3:
+		if spell.uses_cooldown():
+			spell.cooldown_remaining = 0
+		else:
+			spell.restore_charges(1)
+		hud.post("✦ Cascade! %s is refunded." % spell.display_name)
+
+
+# --- synergies --------------------------------------------------------------
+
+func _has_synergy(synergy_name: String) -> bool:
+	if player == null:
+		return false
+	match synergy_name:
+		"Pyromaniac":
+			return player.has_relic(ItemData.RelicEffect.GASOLINE) and player.has_relic(ItemData.RelicEffect.CINDER_HEART)
+		"Thunderstruck":
+			return player.has_relic(ItemData.RelicEffect.UKULELE) and player.has_relic(ItemData.RelicEffect.STORM_CORE)
+		"Glass Phoenix":
+			return player.has_relic(ItemData.RelicEffect.GLASS_CANNON) and player.has_relic(ItemData.RelicEffect.PHOENIX_FEATHER)
+		"Bloodbath":
+			return player.has_relic(ItemData.RelicEffect.VAMPIRIC_MAW) and player.has_relic(ItemData.RelicEffect.BURNING_BLOOD)
+		"Plague Lord":
+			return player.has_relic(ItemData.RelicEffect.VENOM_FANG) and player.has_relic(ItemData.RelicEffect.PERMAFROST_RING)
+		"Sniper's Mark":
+			return player.has_relic(ItemData.RelicEffect.HAWKS_LENS) and player.has_relic(ItemData.RelicEffect.THE_MARK)
+	return false
+
+
+## Every synergy currently live: label -> description (relic pairs plus element masteries).
+func _active_synergies() -> Dictionary:
+	var active := {}
+	if player == null:
+		return active
+	for synergy_name in SYNERGY_INFO:
+		if _has_synergy(synergy_name):
+			active[synergy_name] = SYNERGY_INFO[synergy_name]
+	for el in 7:
+		var known := player.element_mastery_count(el)
+		if known >= 2:
+			var el_name := _element_label(el)
+			var bonus := 2 * mini(known - 1, 2)
+			active["%s Mastery +%d" % [el_name, bonus]] = "You know %d %s spells: each deals +%d damage." % [known, el_name, bonus]
+	return active
+
+
+func _element_label(el: int) -> String:
+	match el:
+		SpellData.Element.FIRE:
+			return "Fire"
+		SpellData.Element.LIGHTNING:
+			return "Lightning"
+		SpellData.Element.ICE:
+			return "Ice"
+		SpellData.Element.ARCANE:
+			return "Arcane"
+		SpellData.Element.NATURE:
+			return "Nature"
+		SpellData.Element.DARK:
+			return "Dark"
+		SpellData.Element.HOLY:
+			return "Holy"
+	return "Magic"
+
+
+func _synergy_line() -> String:
+	var active := _active_synergies()
+	var labels: Array[String] = []
+	for label in active:
+		labels.append(str(label))
+		if not _announced_synergies.has(str(label)):
+			_announced_synergies.append(str(label))
+			hud.post("✦ SYNERGY — %s: %s" % [label, active[label]])
+	return ", ".join(labels)
 
 
 # --- player turns ---------------------------------------------------------
@@ -1456,8 +1739,8 @@ func _pickup() -> bool:
 		if item.data.type == ItemData.Type.SPELL_PEDESTAL and item.data.granted_spell != null:
 			var existing := player.get_learned_spell(item.data.granted_spell.display_name)
 			if existing != null and existing.can_upgrade():
-				existing.upgrade()
-				hud.post("★ PACT SPELL UPGRADED: %s Lv.%d%s!" % [existing.display_name, existing.level, cost_note])
+				var pact_branch := existing.upgrade()
+				hud.post("★ PACT SPELL UPGRADED: %s Lv.%d%s%s!" % [existing.display_name, existing.level, cost_note, _branch_note(pact_branch)])
 			else:
 				var learned := player.learn_spell(item.data.granted_spell)
 				hud.post("★ PACT SPELL LEARNED: %s%s!" % [learned.display_name, cost_note])
@@ -1510,6 +1793,9 @@ func _apply_damage_to_actor(defender: Actor, amount: int, color := Color(1, 0.3,
 		if defender.phoenix_charges < phoenix_before:
 			grid.play_spell_vfx(grid.cells_in_radius(defender.cell, 2, true), Color(1.0, 0.8, 0.2))
 			hud.post("🔥 The Phoenix Feather burns away — you rise again with %d HP!" % defender.stats.hp)
+			if _has_synergy("Glass Phoenix"):
+				var rebirth_hits := _foe_blast(defender.cell, 3, 20, Color(1.0, 0.7, 0.9))
+				hud.post("💥 Glass Phoenix! Your rebirth shatters %d foe(s) for 20 damage." % rebirth_hits)
 	return actual
 
 
@@ -1528,6 +1814,9 @@ func _apply_on_hit_statuses(attacker: Actor, defender: Actor) -> void:
 		var status: StatusData = src["status"]
 		var duration: int = int(src["duration"]) + attacker.total_status_duration_bonus()
 		var extra_dot := attacker.total_burn_damage_bonus() if status.id == "burn" else 0
+		if attacker == player and status.id == "poison" and _has_synergy("Plague Lord"):
+			duration += 3
+			extra_dot += 2
 		defender.apply_status(status, duration, extra_dot)
 
 
@@ -1614,6 +1903,8 @@ func _handle_monster_death(defender: Actor) -> void:
 	var sp_gain := 3 if defender.is_boss else (1 if (defender.is_spawner or _kills % 2 == 0) else 0)
 	player.spell_points += sp_gain
 	var blood_heal := 2 * player.count_relic(ItemData.RelicEffect.BURNING_BLOOD) + 3 * player.count_relic(ItemData.RelicEffect.VAMPIRIC_MAW)
+	if _has_synergy("Bloodbath"):
+		blood_heal += 4
 	if blood_heal > 0:
 		player.heal(blood_heal)
 	var bonus_notes: Array[String] = []
@@ -1669,14 +1960,17 @@ func _handle_monster_death(defender: Actor) -> void:
 func _trigger_kill_relics(death_cell: Vector2i) -> void:
 	var gas_stacks := player.count_relic(ItemData.RelicEffect.GASOLINE)
 	if gas_stacks > 0:
+		var pyro := _has_synergy("Pyromaniac")
+		var gas_radius := gas_stacks + (2 if pyro else 0)
+		var gas_duration := 2 + gas_stacks + (2 if pyro else 0)
 		var ignited := 0
 		for m in monsters:
-			if m.is_allies or m.is_dead() or m.distance_to_cell(death_cell) > gas_stacks:
+			if m.is_allies or m.is_dead() or m.distance_to_cell(death_cell) > gas_radius:
 				continue
-			m.apply_status(BURN_STATUS, 2 + gas_stacks + player.total_status_duration_bonus(), player.total_burn_damage_bonus())
+			m.apply_status(BURN_STATUS, gas_duration + player.total_status_duration_bonus(), player.total_burn_damage_bonus())
 			ignited += 1
 		if ignited > 0:
-			grid.play_spell_vfx(grid.cells_in_radius(death_cell, gas_stacks, true), Color(1.0, 0.55, 0.15))
+			grid.play_spell_vfx(grid.cells_in_radius(death_cell, gas_radius, true), Color(1.0, 0.55, 0.15))
 			hud.post("Gasoline ignites! %d nearby foe(s) catch fire." % ignited)
 
 	var bandolier_stacks := player.count_relic(ItemData.RelicEffect.BANDOLIER)

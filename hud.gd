@@ -4,7 +4,7 @@ extends CanvasLayer
 signal spell_selected(index: int)
 signal item_selected(index: int)
 signal spell_learn_requested(template: SpellData)
-signal spell_upgrade_requested(spell: SpellData)
+signal spell_upgrade_requested(spell: SpellData, branch_id: String)
 signal next_room_confirmed(edge_cell: Vector2i)
 signal debug_action_requested(action: String)
 signal debug_spawn_monster_requested(scene: PackedScene, as_ally: bool)
@@ -57,6 +57,7 @@ var _last_turn := 0
 var _active_spell_index := -1
 var _ui_hover_active := false
 var _pending_edge_cell := Vector2i.ZERO
+var _branch_choice_spell: SpellData
 
 
 func _ready() -> void:
@@ -160,6 +161,7 @@ func close_confirm_modal() -> void:
 func toggle_spellbook() -> void:
 	debug_modal.visible = false
 	spellbook_modal.visible = not spellbook_modal.visible
+	_branch_choice_spell = null
 	hide_popup()
 	if spellbook_modal.visible and _last_player != null:
 		_rebuild_spellbook(_last_player)
@@ -167,6 +169,7 @@ func toggle_spellbook() -> void:
 
 func close_spellbook() -> void:
 	spellbook_modal.visible = false
+	_branch_choice_spell = null
 
 
 func toggle_debug_menu() -> void:
@@ -198,7 +201,9 @@ func show_spell_popup(spell: SpellData, from_ui := true) -> void:
 	if spell == null:
 		return
 	_ui_hover_active = from_ui
-	var bonus_dmg := _last_player.total_spell_damage_bonus() if _last_player != null else 0
+	var bonus_dmg := 0
+	if _last_player != null:
+		bonus_dmg = _last_player.total_spell_damage_bonus() + _last_player.element_mastery_bonus(spell)
 	var bonus_rng := _last_player.total_spell_range_bonus() if _last_player != null else 0
 	var eff_rng := spell.effective_range() + (bonus_rng if spell.effective_range() > 0 else 0)
 	popup_title.text = "%s (Lv.%d/%d)" % [spell.display_name, spell.level, spell.max_level]
@@ -222,6 +227,8 @@ func show_spell_popup(spell: SpellData, from_ui := true) -> void:
 		resource_part
 	]
 	popup_body.text = spell.description
+	if not spell.branches.is_empty():
+		popup_body.text += "\nBranches: %s" % spell.branch_summary()
 	info_popup.reset_size()
 	info_popup.visible = true
 	_update_popup_position()
@@ -308,7 +315,8 @@ func refresh(
 	active_boss: Actor = null,
 	room_turns := 0,
 	par_turns := 18,
-	flawless := true
+	flawless := true,
+	synergies := ""
 ) -> void:
 	_last_player = player
 	_last_turn = turn
@@ -326,6 +334,8 @@ func refresh(
 	if player.has_any_status():
 		status_parts.append(player.describe_statuses())
 	var status_line := "\nStatus: " + ", ".join(status_parts) if not status_parts.is_empty() else ""
+	if not synergies.is_empty():
+		status_line += "\n✦ Synergies: " + synergies
 
 	var room_status := "★ CLEARED ★" if room_cleared else "Foes: %d" % remaining_foes
 	var devil_tag := "ψ OK" if room_turns <= par_turns else "missed"
@@ -369,6 +379,7 @@ func _rebuild_spells(player: Actor, active_spell_idx: int) -> void:
 	var bonus_dmg := player.total_spell_damage_bonus()
 	for i in player.spells.size():
 		var spell := player.spells[i]
+		var spell_bonus := bonus_dmg + player.element_mastery_bonus(spell)
 		var key_label: String = SPELL_KEYS[i] if i < SPELL_KEYS.size() else str(i + 1)
 		var btn := Button.new()
 		btn.focus_mode = Control.FOCUS_NONE
@@ -380,7 +391,7 @@ func _rebuild_spells(player: Actor, active_spell_idx: int) -> void:
 		elif spell.pattern == SpellData.Pattern.DASH:
 			stat_suffix = "DODGE"
 		else:
-			stat_suffix = "%d DMG" % (spell.effective_damage() + bonus_dmg)
+			stat_suffix = "%d DMG" % (spell.effective_damage() + spell_bonus)
 		btn.text = "%s%s  •  %s" % [active_prefix, spell.describe_button(key_label), stat_suffix]
 		if not spell.is_ready():
 			btn.modulate = Color(0.55, 0.55, 0.55)
@@ -463,10 +474,77 @@ func _rebuild_inventory(player: Actor) -> void:
 		inventory_list.add_child(btn)
 
 
+func _rebuild_branch_choice(player: Actor) -> void:
+	var spell := _branch_choice_spell
+	spellbook_title.text = "CHOOSE A PATH — %s Lv.%d → Lv.%d  (%d SP, cost %d)" % [
+		spell.display_name, spell.level, spell.level + 1, player.spell_points, spell.upgrade_cost
+	]
+	var offers := SpellBranches.offers_for(spell)
+	var affordable := player.spell_points >= spell.upgrade_cost
+	for entry in offers:
+		var row := PanelContainer.new()
+		var hbox := HBoxContainer.new()
+		hbox.add_theme_constant_override("separation", 12)
+		row.add_child(hbox)
+
+		var info_box := VBoxContainer.new()
+		info_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		hbox.add_child(info_box)
+		var title := Label.new()
+		title.text = "%s%s" % [entry["name"], "  (Capstone)" if int(entry["tier"]) >= 2 else ""]
+		title.modulate = spell.color.lerp(Color.WHITE, 0.35)
+		info_box.add_child(title)
+		var desc := Label.new()
+		desc.text = str(entry["desc"])
+		desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		desc.modulate = Color(0.88, 0.88, 0.88)
+		info_box.add_child(desc)
+
+		var pick_btn := Button.new()
+		pick_btn.focus_mode = Control.FOCUS_NONE
+		pick_btn.custom_minimum_size = Vector2(140, 38)
+		pick_btn.text = "Choose (%d SP)" % spell.upgrade_cost
+		pick_btn.disabled = not affordable
+		var branch_id := str(entry["id"])
+		pick_btn.pressed.connect(func() -> void:
+			_branch_choice_spell = null
+			spell_upgrade_requested.emit(spell, branch_id)
+		)
+		hbox.add_child(pick_btn)
+		catalog_list.add_child(row)
+
+	var footer := HBoxContainer.new()
+	footer.add_theme_constant_override("separation", 12)
+	if offers.is_empty():
+		var plain_btn := Button.new()
+		plain_btn.focus_mode = Control.FOCUS_NONE
+		plain_btn.text = "Level up (%d SP)" % spell.upgrade_cost
+		plain_btn.disabled = not affordable
+		plain_btn.pressed.connect(func() -> void:
+			_branch_choice_spell = null
+			spell_upgrade_requested.emit(spell, "")
+		)
+		footer.add_child(plain_btn)
+	var back_btn := Button.new()
+	back_btn.focus_mode = Control.FOCUS_NONE
+	back_btn.text = "← Back to Grimoire"
+	back_btn.pressed.connect(func() -> void:
+		_branch_choice_spell = null
+		_rebuild_spellbook(player)
+	)
+	footer.add_child(back_btn)
+	catalog_list.add_child(footer)
+
+
 func _rebuild_spellbook(player: Actor) -> void:
 	spellbook_title.text = "RIFT GRIMOIRE — Spell Points (SP): %d" % player.spell_points
 	for child in catalog_list.get_children():
 		child.queue_free()
+	if _branch_choice_spell != null:
+		if player.spells.has(_branch_choice_spell) and _branch_choice_spell.can_upgrade():
+			_rebuild_branch_choice(player)
+			return
+		_branch_choice_spell = null
 
 	for template in _spell_catalog:
 		var learned := player.get_learned_spell(template.display_name)
@@ -508,7 +586,8 @@ func _rebuild_spellbook(player: Actor) -> void:
 			action_btn.disabled = player.spell_points < learned.upgrade_cost
 			var sp := learned
 			action_btn.pressed.connect(func() -> void:
-				spell_upgrade_requested.emit(sp)
+				_branch_choice_spell = sp
+				_rebuild_spellbook(player)
 			)
 		else:
 			action_btn.text = "MAX LEVEL"

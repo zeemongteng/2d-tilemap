@@ -42,14 +42,40 @@ enum Pattern { SINGLE, BLAST, BEAM, CHAIN, BLINK, NOVA, SUMMON, DASH }
 var charges := 5
 var cooldown_remaining := 0
 var level := 1
+## Ids of the upgrade branches picked so far (see SpellBranches).
+var branches: Array[String] = []
 
 
 func init_runtime() -> SpellData:
 	var copy := duplicate() as SpellData
 	copy.level = 1
+	copy.branches = []
 	copy.charges = copy.effective_max_charges()
 	copy.cooldown_remaining = 0
 	return copy
+
+
+func has_branch(branch_id: String) -> bool:
+	return branches.has(branch_id)
+
+
+func branch_stat(key: String) -> int:
+	var total := 0
+	for branch_id in branches:
+		var entry := SpellBranches.get_branch(branch_id)
+		if entry.is_empty():
+			continue
+		total += int((entry["stats"] as Dictionary).get(key, 0))
+	return total
+
+
+func branch_summary() -> String:
+	var names: Array[String] = []
+	for branch_id in branches:
+		var entry := SpellBranches.get_branch(branch_id)
+		if not entry.is_empty():
+			names.append(str(entry["name"]))
+	return ", ".join(names)
 
 
 func uses_cooldown() -> bool:
@@ -57,7 +83,29 @@ func uses_cooldown() -> bool:
 
 
 func effective_cooldown() -> int:
-	return maxi(1, cooldown_turns - (level - 1) * bonus_cooldown_reduction_per_level)
+	return maxi(1, cooldown_turns - (level - 1) * bonus_cooldown_reduction_per_level + branch_stat("cooldown"))
+
+
+func effective_status_duration() -> int:
+	if status_duration <= 0:
+		return 0
+	return status_duration + branch_stat("status_duration")
+
+
+func effective_heal() -> int:
+	return heal_per_hit + branch_stat("heal")
+
+
+func effective_chain_jumps() -> int:
+	return chain_jumps + level - 1 + branch_stat("jumps")
+
+
+func summon_hp_bonus() -> int:
+	return (level - 1) * bonus_summon_hp_per_level + branch_stat("summon_hp")
+
+
+func summon_atk_bonus() -> int:
+	return (level - 1) * bonus_summon_atk_per_level + branch_stat("summon_atk")
 
 
 func is_ready() -> bool:
@@ -70,37 +118,46 @@ func tick_cooldown() -> void:
 
 
 func effective_damage() -> int:
-	return damage + (level - 1) * bonus_damage_per_level
+	return damage + (level - 1) * bonus_damage_per_level + branch_stat("damage")
 
 
 func effective_max_charges() -> int:
-	return max_charges + (level - 1) * bonus_charges_per_level
+	return maxi(1, max_charges + (level - 1) * bonus_charges_per_level + branch_stat("charges"))
 
 
 func effective_range() -> int:
 	if pattern == Pattern.NOVA:
 		return 0
-	return cast_range + (level - 1) * bonus_range_per_level
+	return cast_range + (level - 1) * bonus_range_per_level + branch_stat("range")
 
 
 func effective_radius() -> int:
-	return radius + (level - 1) * bonus_radius_per_level
+	return radius + (level - 1) * bonus_radius_per_level + branch_stat("radius")
 
 
 func can_upgrade() -> bool:
 	return level < max_level
 
 
-func upgrade() -> void:
+## Levels the spell up, taking `branch_id` (a random valid branch when empty). Returns the branch id taken, or "".
+func upgrade(branch_id := "") -> String:
 	if not can_upgrade():
-		return
+		return ""
+	var chosen := branch_id
+	if chosen.is_empty():
+		var offers := SpellBranches.offers_for(self)
+		if not offers.is_empty():
+			chosen = str(offers[randi() % offers.size()]["id"])
 	var old_max := effective_max_charges()
+	if not chosen.is_empty() and not has_branch(chosen):
+		branches.append(chosen)
 	level += 1
 	if uses_cooldown():
 		cooldown_remaining = 0
 	else:
 		var gained := effective_max_charges() - old_max
 		charges = mini(effective_max_charges(), charges + maxi(1, gained))
+	return chosen
 
 
 func restore_charges(amount: int) -> void:
@@ -137,7 +194,7 @@ func pattern_name() -> String:
 		Pattern.BEAM:
 			return "Beam"
 		Pattern.CHAIN:
-			return "Chain (%d)" % (chain_jumps + level - 1)
+			return "Chain (%d)" % effective_chain_jumps()
 		Pattern.BLINK:
 			return "Teleport"
 		Pattern.NOVA:
@@ -172,14 +229,15 @@ func describe_details() -> String:
 	if effective_range() > 0:
 		parts.append("Rng %d" % effective_range())
 	if status_effect != null and status_duration > 0:
-		parts.append("%s (%dt)" % [status_effect.display_name, status_duration])
-	if heal_per_hit > 0:
-		parts.append("Heals %d/hit" % heal_per_hit)
+		parts.append("%s (%dt)" % [status_effect.display_name, effective_status_duration()])
+	if effective_heal() > 0:
+		parts.append("Heals %d/hit" % effective_heal())
 	if uses_cooldown():
 		parts.append("%dt Cooldown" % effective_cooldown())
 	else:
 		parts.append("%d Charges" % effective_max_charges())
 	var stats_line := "  •  ".join(parts)
-	if description.is_empty():
-		return stats_line
-	return "%s\n%s" % [stats_line, description]
+	var text := stats_line if description.is_empty() else "%s\n%s" % [stats_line, description]
+	if not branches.is_empty():
+		text += "\nBranches: %s" % branch_summary()
+	return text

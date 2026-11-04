@@ -152,6 +152,23 @@ func total_afflicted_damage_bonus() -> int:
 	return bonus
 
 
+## Number of other (non-innate) spells known that share this spell's element.
+func element_mastery_count(element: int) -> int:
+	var count := 0
+	for s in spells:
+		if not s.is_innate and int(s.element) == element:
+			count += 1
+	return count
+
+
+## Spell-school synergy: +2 damage per other known spell of the same element (max +4).
+func element_mastery_bonus(spell: SpellData) -> int:
+	var others := element_mastery_count(int(spell.element))
+	if not spell.is_innate and spells.has(spell):
+		others -= 1
+	return 2 * clampi(others, 0, 2)
+
+
 func add_relic(relic: ItemData) -> void:
 	relics.append(relic)
 	if relic.attack_bonus > 0:

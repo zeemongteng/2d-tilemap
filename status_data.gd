@@ -38,4 +38,3 @@ func summary_text() -> String:
 	if damage_per_turn > 0:
 		return "%s (%dt, %d dmg/t)" % [display_name, turns_left, damage_per_turn]
 	return "%s (%dt)" % [display_name, turns_left]
-
