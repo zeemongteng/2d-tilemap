@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="SpellData" format=3]
+
+[ext_resource type="Script" path="res://spell_data.gd" id="1_spell"]
+[ext_resource type="Resource" path="res://statuses/hexed.tres" id="2_hexed"]
+
+[resource]
+script = ExtResource("1_spell")
+display_name = "Withering Pulse"
+description = "A ring of dark energy that hexes everything close by."
+element = 5
+pattern = 5
+color = Color(0.72, 0.35, 0.95, 1)
+max_charges = 1
+cooldown_turns = 5
+cast_range = 0
+radius = 2
+damage = 2
+status_effect = ExtResource("2_hexed")
+status_duration = 2

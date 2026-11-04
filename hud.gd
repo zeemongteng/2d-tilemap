@@ -260,9 +260,16 @@ func show_actor_popup(actor: Actor) -> void:
 		popup_subtitle.text = "HP %d/%d  •  ATK %d  •  DEF %d%s" % [
 			actor.stats.hp, actor.stats.max_hp, actor.total_attack(), actor.total_defense(), rng_str
 		]
+	var spell_info := ""
+	if not actor.spells.is_empty():
+		var sp_parts: Array[String] = []
+		for sp in actor.spells:
+			var cd_tag := "Ready" if sp.is_ready() else "CD %dt" % sp.cooldown_remaining
+			sp_parts.append("%s (%s)" % [sp.display_name, cd_tag])
+		spell_info = "\nSpells: %s" % ", ".join(sp_parts)
 	var status_info := "\nStatuses: %s" % actor.describe_statuses() if actor.has_any_status() else ""
 	var base_desc := actor.description if not actor.description.is_empty() else "Hostile creature."
-	popup_body.text = "%s%s" % [base_desc, status_info]
+	popup_body.text = "%s%s%s" % [base_desc, spell_info, status_info]
 	info_popup.reset_size()
 	info_popup.visible = true
 	_update_popup_position()

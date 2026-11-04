@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="SpellData" format=3]
+
+[ext_resource type="Script" path="res://spell_data.gd" id="1_spell"]
+[ext_resource type="Resource" path="res://statuses/burn.tres" id="2_burn"]
+
+[resource]
+script = ExtResource("1_spell")
+display_name = "Firebolt"
+description = "Hurls a firebolt that sets the target alight."
+element = 0
+pattern = 0
+color = Color(1, 0.52, 0.18, 1)
+max_charges = 1
+cooldown_turns = 4
+cast_range = 5
+damage = 3
+status_effect = ExtResource("2_burn")
+status_duration = 2

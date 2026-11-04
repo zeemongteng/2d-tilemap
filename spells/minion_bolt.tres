@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="SpellData" format=3]
+
+[ext_resource type="Script" path="res://spell_data.gd" id="1_spell"]
+
+[resource]
+script = ExtResource("1_spell")
+display_name = "Familiar Bolt"
+description = "A crackling bolt of raw arcana, loosed by a minion."
+element = 3
+pattern = 0
+color = Color(0.75, 0.55, 1, 1)
+max_charges = 1
+cooldown_turns = 3
+cast_range = 5
+damage = 3
+bonus_damage_per_level = 1

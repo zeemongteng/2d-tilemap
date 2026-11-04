@@ -32,6 +32,8 @@ extends Node2D
 ## On death, splits into this many copies of death_spawn_scene.
 @export var death_spawn_scene: PackedScene
 @export var death_spawn_count := 2
+## Spells this creature casts on its own turn (cooldown spells recommended).
+@export var monster_spells: Array[Resource] = []
 
 var cell := Vector2i.ZERO
 var grid: HexGrid
@@ -65,6 +67,11 @@ func _ready() -> void:
 		stats = stats.duplicate() as Stats
 	stats.hp = stats.max_hp
 	spawn_cooldown = maxi(1, spawn_interval - 1)
+	for template in monster_spells:
+		if template is SpellData:
+			var known := learn_spell(template as SpellData)
+			if known.uses_cooldown():
+				known.cooldown_remaining = 1
 
 
 func place(target_grid: HexGrid, target_cell: Vector2i) -> void:

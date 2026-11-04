@@ -39,6 +39,8 @@ enum RelicEffect {
 	UKULELE,
 	LUCKY_PENNY,
 	HAWKS_LENS,
+	FAMILIARS_TOME,
+	ECHO_MIRROR,
 }
 
 @export var display_name := "Item"

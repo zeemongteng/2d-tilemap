@@ -15,6 +15,11 @@ const FREEZE_STATUS: StatusData = preload("res://statuses/freeze.tres")
 const STUN_STATUS: StatusData = preload("res://statuses/stunned.tres")
 const HEXED_STATUS: StatusData = preload("res://statuses/hexed.tres")
 const DASH_SPELL: SpellData = preload("res://spells/dash.tres")
+const MINION_SPELLS: Array[SpellData] = [
+	preload("res://spells/minion_bolt.tres"),
+	preload("res://spells/minion_ember.tres"),
+	preload("res://spells/minion_frostbite.tres"),
+]
 const SYNERGY_INFO := {
 	"Pyromaniac": "Gasoline + Cinder Heart: kill-fires spread 2 hexes farther and burn 2 turns longer.",
 	"Thunderstruck": "Ukulele + Storm Core: every spell you cast has a 50% chance to unleash a Ukulele zap.",
@@ -1011,6 +1016,7 @@ func _on_debug_spawn_monster_requested(scene: PackedScene, as_ally: bool) -> voi
 	if as_ally:
 		unit.is_allies = true
 		unit.color = unit.color.lerp(Color(0.35, 0.95, 1.0), 0.55)
+		_grant_familiar_tome_spell(unit)
 		unit.queue_redraw()
 	else:
 		_room_cleared = false
@@ -1029,7 +1035,7 @@ func _on_debug_spawn_item_requested(item: ItemData, grant_directly: bool) -> voi
 	if grant_directly:
 		match copy.type:
 			ItemData.Type.RELIC:
-				player.add_relic(copy)
+				_acquire_relic(copy)
 				hud.post("[Debug] Granted Relic: %s!" % copy.display_name)
 			ItemData.Type.SPELL_ORB:
 				player.spell_points += copy.sp_amount
@@ -1238,6 +1244,7 @@ func _cast_spell(spell: SpellData, target_cell: Vector2i) -> void:
 					hud.post("Pack Tactics: a second %s answers the call!" % twin_ally.display_name.to_lower())
 					break
 		_apply_cast_riders(spell, 0)
+		_trigger_echo_mirror(spell, target_cell)
 		await vfx_tween.finished
 		await _advance_turn()
 		return
@@ -1314,6 +1321,7 @@ func _cast_spell(spell: SpellData, target_cell: Vector2i) -> void:
 	if struck_zap_origin != null and not struck_zap_origin.is_dead() and _has_synergy("Thunderstruck") and _rng.randf() < 0.5:
 		_ukulele_zap(struck_zap_origin, maxi(1, player.count_relic(ItemData.RelicEffect.UKULELE)))
 	_apply_cast_riders(spell, hit_monsters.size())
+	_trigger_echo_mirror(spell, target_cell)
 
 	if player.is_dead():
 		_dead = true
@@ -1335,9 +1343,62 @@ func _spawn_summon(spell: SpellData, cell: Vector2i) -> Actor:
 	ally.stats.max_hp += spell.summon_hp_bonus()
 	ally.stats.hp = ally.stats.max_hp
 	ally.stats.attack += spell.summon_atk_bonus() + player.total_spell_damage_bonus()
+	_grant_familiar_tome_spell(ally)
 	ally.queue_redraw()
 	monsters.append(ally)
 	return ally
+
+
+func _acquire_relic(relic: ItemData) -> void:
+	player.add_relic(relic)
+	if relic.relic_effect == ItemData.RelicEffect.FAMILIARS_TOME:
+		for m in monsters:
+			if is_instance_valid(m) and m.is_allies and not m.is_dead():
+				_grant_familiar_tome_spell(m)
+
+
+func _grant_familiar_tome_spell(ally: Actor) -> void:
+	if ally == null or not ally.is_allies or player == null:
+		return
+	if not player.has_relic(ItemData.RelicEffect.FAMILIARS_TOME):
+		return
+	for existing in ally.spells:
+		for cantrip in MINION_SPELLS:
+			if existing.display_name == cantrip.display_name:
+				return
+	var pick: SpellData = MINION_SPELLS[_rng.randi_range(0, MINION_SPELLS.size() - 1)]
+	var learned := ally.learn_spell(pick)
+	learned.cooldown_remaining = 0
+
+
+func _trigger_echo_mirror(spell: SpellData, player_target_cell: Vector2i) -> void:
+	if spell.pattern in [SpellData.Pattern.DASH, SpellData.Pattern.BLINK]:
+		return
+	var echo_stacks := player.count_relic(ItemData.RelicEffect.ECHO_MIRROR)
+	if echo_stacks <= 0:
+		return
+	var chance := minf(1.0, 0.20 * float(echo_stacks))
+	for m in monsters.duplicate():
+		if not is_instance_valid(m) or not m.is_allies or m.is_dead():
+			continue
+		if _rng.randf() >= chance:
+			continue
+		var aim_cell := player_target_cell
+		if spell.pattern == SpellData.Pattern.NOVA:
+			aim_cell = m.cell
+		elif spell.pattern == SpellData.Pattern.SUMMON:
+			aim_cell = Vector2i(-999, -999)
+			for n in grid.walkable_neighbors(m.cell):
+				if grid.is_in_current_room(n) and not _is_occupied(n):
+					aim_cell = n
+					break
+			if aim_cell == Vector2i(-999, -999):
+				continue
+		else:
+			var foe := _nearest_enemy_for(m)
+			if foe != null:
+				aim_cell = foe.cell
+		_execute_actor_spell(m, spell, aim_cell, 0.6, true)
 
 
 func _foes_near(origin: Vector2i, near_radius: int, exclude: Actor = null) -> Array[Actor]:
@@ -1607,7 +1668,7 @@ func _use_item(index: int) -> void:
 			player.spell_points += item.sp_amount
 			hud.post("You absorb the %s (+%d SP)." % [item.display_name.to_lower(), item.sp_amount])
 		ItemData.Type.RELIC:
-			player.add_relic(item)
+			_acquire_relic(item)
 			hud.post("★ RELIC ACQUIRED: %s! %s" % [item.display_name, item.description])
 		_:
 			player.equip(item)
@@ -1745,7 +1806,7 @@ func _pickup() -> bool:
 				var learned := player.learn_spell(item.data.granted_spell)
 				hud.post("★ PACT SPELL LEARNED: %s%s!" % [learned.display_name, cost_note])
 		else:
-			player.add_relic(item.data)
+			_acquire_relic(item.data)
 			hud.post("★ PACT RELIC ACQUIRED: %s%s! %s" % [item.data.display_name, cost_note, item.data.description])
 		grid.play_spell_vfx([player.cell], item.data.color)
 		items.erase(item)
@@ -1754,7 +1815,7 @@ func _pickup() -> bool:
 			_clear_remaining_angel_pedestals()
 		return true
 	if item.data.type == ItemData.Type.RELIC:
-		player.add_relic(item.data)
+		_acquire_relic(item.data)
 		items.erase(item)
 		grid.play_spell_vfx([player.cell], item.data.color)
 		hud.post("★ RELIC ACQUIRED: %s — %s" % [item.data.display_name, item.data.description])
@@ -2126,6 +2187,10 @@ func _monsters_act() -> void:
 		var target := _nearest_enemy_for(m)
 		if target == null:
 			continue
+		if _try_actor_cast_spell(m, target):
+			if _dead:
+				break
+			continue
 		var dist := m.distance_to_cell(target.cell)
 		if dist == 1:
 			_attack(m, target)
@@ -2140,6 +2205,9 @@ func _monsters_act() -> void:
 		var next := _monster_step_toward(m, target)
 		if next != m.cell:
 			tween = m.move_to(next, STEP_TIME)
+	for m in monsters:
+		if is_instance_valid(m) and not m.is_dead():
+			m.tick_spell_cooldowns()
 	if tween != null:
 		await tween.finished
 	else:
@@ -2150,8 +2218,11 @@ func _monsters_act() -> void:
 
 
 func _ally_act(ally: Actor) -> Tween:
+	_grant_familiar_tome_spell(ally)
 	var target := _nearest_enemy_for(ally)
 	if target != null:
+		if _try_actor_cast_spell(ally, target):
+			return null
 		var dist := target.distance_to_cell(ally.cell)
 		if dist == 1:
 			_attack(ally, target)
@@ -2277,6 +2348,10 @@ func _boss_act(boss: Actor) -> Tween:
 		_attack(boss, target)
 		return null
 
+	# 4a. Boss spellcasting if the boss knows any spells.
+	if target != null and _try_actor_cast_spell(boss, target):
+		return null
+
 	# 4b. Ranged bosses (attack_range > 1) open fire when they have a clear line.
 	if target != null and boss.attack_range > 1 and boss.distance_to_cell(target.cell) <= boss.attack_range and grid.has_line_of_sight(boss.cell, target.cell):
 		_ranged_monster_attack(boss, target)
@@ -2336,9 +2411,186 @@ func _spawner_act(spawner: Actor) -> void:
 	var scene := spawner.spawn_scene if spawner.spawn_scene != null else _random_monster_scene()
 	var summoned := _spawn_actor(scene, spawn_cell)
 	summoned.is_allies = spawner.is_allies
+	if summoned.is_allies:
+		_grant_familiar_tome_spell(summoned)
 	monsters.append(summoned)
 	grid.play_spell_vfx([spawner.cell, spawn_cell], spawner.color)
 	hud.post("%s summons %s!" % [spawner.display_name, summoned.display_name.to_lower()])
+
+
+func _try_actor_cast_spell(caster: Actor, target: Actor) -> bool:
+	if caster.spells.is_empty() or target == null or target.is_dead():
+		return false
+	var dist := caster.distance_to_cell(target.cell)
+	for sp in caster.spells:
+		if not sp.is_ready():
+			continue
+		if sp.pattern in [SpellData.Pattern.DASH, SpellData.Pattern.BLINK]:
+			continue
+		if sp.pattern == SpellData.Pattern.NOVA:
+			if dist > sp.effective_radius():
+				continue
+		elif sp.pattern == SpellData.Pattern.SUMMON:
+			var has_spot := false
+			for n in grid.walkable_neighbors(caster.cell):
+				if grid.is_in_current_room(n) and not _is_occupied(n):
+					has_spot = true
+					break
+			if not has_spot:
+				continue
+		else:
+			if dist > sp.effective_range():
+				continue
+			if sp.requires_los and not grid.has_line_of_sight(caster.cell, target.cell):
+				continue
+		if sp.uses_cooldown():
+			sp.cooldown_remaining = sp.effective_cooldown() + 1
+		else:
+			sp.charges = maxi(0, sp.charges - 1)
+		var aim_cell := caster.cell if sp.pattern == SpellData.Pattern.NOVA else target.cell
+		if sp.pattern == SpellData.Pattern.SUMMON:
+			for n in grid.walkable_neighbors(caster.cell):
+				if grid.is_in_current_room(n) and not _is_occupied(n):
+					aim_cell = n
+					break
+		_execute_actor_spell(caster, sp, aim_cell, 1.0, false)
+		return true
+	return false
+
+
+func _compute_actor_chain_cells(caster: Actor, start_cell: Vector2i, jump_range: int, max_jumps: int) -> Array[Vector2i]:
+	var result: Array[Vector2i] = [start_cell]
+	var current := start_cell
+	var hit_actors: Array[Actor] = []
+	if not caster.is_allies and player.cell == start_cell:
+		hit_actors.append(player)
+	var first_m := _monster_at(start_cell)
+	if first_m != null and first_m.is_allies != caster.is_allies:
+		hit_actors.append(first_m)
+	for _i in max_jumps:
+		var best_cell := current
+		var best_dist := 999
+		var best_actor: Actor = null
+		if not caster.is_allies and not hit_actors.has(player) and not player.is_dead():
+			var pd := HexGrid.distance(current, player.cell)
+			if pd <= jump_range and pd < best_dist:
+				best_dist = pd
+				best_cell = player.cell
+				best_actor = player
+		for m in monsters:
+			if not is_instance_valid(m) or m.is_dead() or m.is_allies == caster.is_allies or hit_actors.has(m):
+				continue
+			var d := m.distance_to_cell(current)
+			if d <= jump_range and d < best_dist:
+				best_dist = d
+				best_cell = m.cell
+				best_actor = m
+		if best_actor == null:
+			break
+		hit_actors.append(best_actor)
+		result.append(best_cell)
+		current = best_cell
+	return result
+
+
+func _execute_actor_spell(caster: Actor, spell: SpellData, target_cell: Vector2i, damage_scale := 1.0, is_echo := false) -> void:
+	if spell.pattern == SpellData.Pattern.SUMMON:
+		if _is_occupied(target_cell):
+			return
+		var sum_scene := spell.summon_scene if spell.summon_scene != null else monster_scene
+		var unit := _spawn_actor(sum_scene, target_cell)
+		unit.is_allies = caster.is_allies
+		unit.stats.max_hp = maxi(1, int(ceil(float(unit.stats.max_hp + spell.summon_hp_bonus()) * damage_scale)))
+		unit.stats.hp = unit.stats.max_hp
+		unit.stats.attack = maxi(1, int(ceil(float(unit.stats.attack + spell.summon_atk_bonus()) * damage_scale)))
+		if unit.is_allies:
+			_grant_familiar_tome_spell(unit)
+		unit.queue_redraw()
+		monsters.append(unit)
+		grid.play_spell_vfx([caster.cell, target_cell], spell.color)
+		if is_echo:
+			hud.post("🪞 Echo Mirror! %s echoes %s and summons %s!" % [caster.display_name, spell.display_name, unit.display_name.to_lower()])
+		else:
+			hud.post("✦ %s casts %s, summoning %s!" % [caster.display_name, spell.display_name, unit.display_name.to_lower()])
+		return
+
+	var aoe_cells: Array[Vector2i] = []
+	var arc_points: Array[Vector2] = []
+	match spell.pattern:
+		SpellData.Pattern.SINGLE:
+			aoe_cells = [target_cell]
+			arc_points = [grid.cell_to_pixel(caster.cell), grid.cell_to_pixel(target_cell)]
+		SpellData.Pattern.BLAST:
+			aoe_cells = grid.cells_in_radius(target_cell, spell.effective_radius(), true)
+			arc_points = [grid.cell_to_pixel(caster.cell), grid.cell_to_pixel(target_cell)]
+		SpellData.Pattern.BEAM:
+			aoe_cells = grid.hex_line(caster.cell, target_cell, true)
+			arc_points.append(grid.cell_to_pixel(caster.cell))
+			for c in aoe_cells:
+				arc_points.append(grid.cell_to_pixel(c))
+		SpellData.Pattern.CHAIN:
+			aoe_cells = _compute_actor_chain_cells(caster, target_cell, spell.effective_radius(), spell.effective_chain_jumps())
+			arc_points.append(grid.cell_to_pixel(caster.cell))
+			for c in aoe_cells:
+				arc_points.append(grid.cell_to_pixel(c))
+		SpellData.Pattern.NOVA:
+			aoe_cells = grid.cells_in_radius(caster.cell, spell.effective_radius(), true)
+			aoe_cells.erase(caster.cell)
+		_:
+			aoe_cells = [target_cell]
+			arc_points = [grid.cell_to_pixel(caster.cell), grid.cell_to_pixel(target_cell)]
+
+	grid.play_spell_vfx(aoe_cells, spell.color, arc_points)
+
+	var raw_dmg := spell.effective_damage()
+	if caster.is_allies and raw_dmg > 0:
+		var tome_bonus := maxi(0, player.count_relic(ItemData.RelicEffect.FAMILIARS_TOME) - 1)
+		raw_dmg += tome_bonus
+	var base_dmg := maxi(1, int(ceil(float(raw_dmg) * damage_scale))) if raw_dmg > 0 else 0
+
+	var victims: Array[Actor] = []
+	if not caster.is_allies and not player.is_dead() and aoe_cells.has(player.cell):
+		victims.append(player)
+	for c in aoe_cells:
+		var m := _monster_at(c)
+		if m != null and is_instance_valid(m) and not m.is_dead() and m.is_allies != caster.is_allies and not victims.has(m):
+			victims.append(m)
+
+	var hit_names: Array[String] = []
+	var bonus_dur := player.total_status_duration_bonus() if caster.is_allies else 0
+	var bonus_burn := player.total_burn_damage_bonus() if caster.is_allies else 0
+
+	for v in victims:
+		var dealt := 0
+		if base_dmg > 0:
+			var mitigated := maxi(1, base_dmg - v.total_defense()) if v == player else base_dmg
+			var final_dmg := maxi(1, int(ceil(float(mitigated) * v.incoming_damage_multiplier())))
+			if spell.element == SpellData.Element.FIRE or not caster.is_allies:
+				v.consume_shatter_statuses()
+			dealt = _apply_damage_to_actor(v, final_dmg, spell.color)
+		if not v.is_dead() and spell.status_effect != null and spell.effective_status_duration() > 0:
+			if not (v == player and spell.status_effect.charms_actor):
+				var extra_dot := bonus_burn if spell.status_effect.id == "burn" else 0
+				var dur := spell.effective_status_duration() + (bonus_dur if caster.is_allies else 0)
+				v.apply_status(spell.status_effect, dur, extra_dot)
+		var v_label := "you" if v == player else v.display_name.to_lower()
+		if base_dmg > 0:
+			hit_names.append("%s (%d)" % [v_label, dealt])
+		else:
+			hit_names.append(v_label)
+
+	var prefix := "🪞 Echo Mirror! %s echoes %s" % [caster.display_name, spell.display_name] if is_echo else "✦ %s casts %s" % [caster.display_name, spell.display_name]
+	if hit_names.is_empty():
+		hud.post("%s!" % prefix)
+	else:
+		hud.post("%s, hitting %s!" % [prefix, ", ".join(hit_names)])
+
+	for v in victims:
+		if v == player and player.is_dead():
+			_dead = true
+			hud.post("You are slain by %s's %s. Press R to start over." % [caster.display_name.to_lower(), spell.display_name])
+		elif v != player and v.is_dead():
+			_handle_monster_death(v)
 
 
 func _ranged_monster_attack(attacker: Actor, defender: Actor) -> void:

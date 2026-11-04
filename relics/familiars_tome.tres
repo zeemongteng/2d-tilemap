@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Familiar's Tome"
+description = "A grimoire of cantrips for your servants. Every minion learns a random spell (bolt, ember or frostbite) and casts it in battle. Each extra copy adds +1 damage to their spells."
+glyph = "?"
+color = Color(0.7, 0.55, 1, 1)
+type = 5
+relic_effect = 21

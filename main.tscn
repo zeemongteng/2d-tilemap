@@ -80,6 +80,8 @@
 [ext_resource type="Resource" path="res://items/mystery_pill.tres" id="79_pill"]
 [ext_resource type="Resource" path="res://spells/siren_song.tres" id="80_siren"]
 [ext_resource type="Resource" path="res://spells/dread_howl.tres" id="81_dread"]
+[ext_resource type="Resource" path="res://relics/familiars_tome.tres" id="82_r_tome"]
+[ext_resource type="Resource" path="res://relics/echo_mirror.tres" id="83_r_echo"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_game")
@@ -90,7 +92,7 @@ spawner_pool = Array[PackedScene]([ExtResource("23_spawner"), ExtResource("23_sp
 boss_pool = Array[PackedScene]([ExtResource("31_boss"), ExtResource("47_bone_lord"), ExtResource("48_pyre_warden")])
 world_item_scene = ExtResource("5_world_item")
 item_pool = Array[Resource]([ExtResource("7_sword"), ExtResource("8_axe"), ExtResource("70_dagger"), ExtResource("71_brand"), ExtResource("72_staff"), ExtResource("9_leather"), ExtResource("10_mail"), ExtResource("73_robes"), ExtResource("74_plate"), ExtResource("11_potion"), ExtResource("11_potion"), ExtResource("75_gpotion"), ExtResource("76_elixir"), ExtResource("12_mana"), ExtResource("12_mana"), ExtResource("13_orb"), ExtResource("77_gorb"), ExtResource("78_bomb"), ExtResource("78_bomb"), ExtResource("79_pill"), ExtResource("79_pill")])
-relic_pool = Array[Resource]([ExtResource("24_r_blood"), ExtResource("25_r_vajra"), ExtResource("26_r_anchor"), ExtResource("27_r_storm"), ExtResource("28_r_prism"), ExtResource("29_r_cinder"), ExtResource("30_r_permafrost"), ExtResource("61_r_gas"), ExtResource("62_r_fang"), ExtResource("63_r_bandolier"), ExtResource("64_r_soul"), ExtResource("65_r_uke"), ExtResource("66_r_penny"), ExtResource("67_r_lens")])
+relic_pool = Array[Resource]([ExtResource("24_r_blood"), ExtResource("25_r_vajra"), ExtResource("26_r_anchor"), ExtResource("27_r_storm"), ExtResource("28_r_prism"), ExtResource("29_r_cinder"), ExtResource("30_r_permafrost"), ExtResource("61_r_gas"), ExtResource("62_r_fang"), ExtResource("63_r_bandolier"), ExtResource("64_r_soul"), ExtResource("65_r_uke"), ExtResource("66_r_penny"), ExtResource("67_r_lens"), ExtResource("82_r_tome"), ExtResource("83_r_echo")])
 devil_pool = Array[Resource]([ExtResource("35_the_mark"), ExtResource("36_vampiric_maw"), ExtResource("33_brimstone"), ExtResource("68_r_glass"), ExtResource("59_drain"), ExtResource("58_meteor")])
 angel_pool = Array[Resource]([ExtResource("37_sacred_heart"), ExtResource("38_holy_mantle"), ExtResource("34_divine_smite"), ExtResource("69_r_phoenix"), ExtResource("60_angel")])
 starting_items = Array[Resource]([ExtResource("12_mana"), ExtResource("11_potion")])
