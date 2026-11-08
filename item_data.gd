@@ -15,6 +15,10 @@ enum Type {
 	SPELL_PEDESTAL,
 	BOMB,
 	PILL,
+	GOLD,
+	SHOP_PORTAL,
+	SHRINE_OF_CHANCE,
+	BLOOD_ALTAR,
 }
 
 enum RelicEffect {
@@ -59,7 +63,11 @@ enum RelicEffect {
 @export var heal_amount := 0
 @export var charge_restore := 0
 @export var sp_amount := 0
+@export var gold_amount := 0
 @export var hp_cost := 0
+@export var gold_cost := 0
+@export var is_on_sale := false
+@export var uses_left := 2
 @export var granted_spell: SpellData
 @export var relic_effect := RelicEffect.NONE
 ## Status inflicted on foes by the wielder's melee hits (weapons and relics).
@@ -90,7 +98,7 @@ func describe() -> String:
 		Type.MANA_POTION:
 			return "%s (+%d spell charges)" % [display_name, charge_restore]
 		Type.SPELL_ORB:
-			return "%s (+%d SP)" % [display_name, sp_amount]
+			return "%s (+%d Souls)" % [display_name, sp_amount]
 		Type.RELIC:
 			return "? %s" % display_name
 		Type.SPELL_PEDESTAL:
@@ -99,31 +107,54 @@ func describe() -> String:
 			return "%s (%d DMG blast)" % [display_name, blast_damage]
 		Type.PILL:
 			return "%s (???)" % display_name
+		Type.GOLD:
+			return "%s (+%d¢)" % [display_name, gold_amount]
+		Type.SHRINE_OF_CHANCE:
+			return "%s (%d¢)" % [display_name, gold_cost]
+		Type.BLOOD_ALTAR:
+			return "%s (-%d HP)" % [display_name, hp_cost]
 		_:
 			return "%s (heals %d)" % [display_name, heal_amount]
+
+
+func _cost_suffix() -> String:
+	if gold_cost > 0:
+		var sale_note := " (50% OFF SALE!)" if is_on_sale else ""
+		return "  •  Shop Price: %d¢%s" % [gold_cost, sale_note]
+	if hp_cost > 0:
+		return "  •  Costs %d HP" % hp_cost
+	return ""
 
 
 func type_name() -> String:
 	match type:
 		Type.WEAPON:
-			return "Weapon  •  +%d ATK%s" % [attack_bonus, gear_extras()]
+			return "Weapon  •  +%d ATK%s%s" % [attack_bonus, gear_extras(), _cost_suffix()]
 		Type.ARMOR:
-			return "Armor  •  +%d DEF%s" % [defense_bonus, gear_extras()]
+			return "Armor  •  +%d DEF%s%s" % [defense_bonus, gear_extras(), _cost_suffix()]
 		Type.BOMB:
-			return "Consumable  •  %d DMG to all foes within %d hex" % [blast_damage, blast_radius]
+			return "Consumable  •  %d DMG to all foes within %d hex%s" % [blast_damage, blast_radius, _cost_suffix()]
 		Type.PILL:
-			return "Consumable  •  Unknown effect — gamble!"
+			return "Consumable  •  Unknown effect — gamble!%s" % _cost_suffix()
 		Type.MANA_POTION:
-			return "Consumable  •  +%d Spell Charges" % charge_restore
+			return "Consumable  •  +%d Spell Charges%s" % [charge_restore, _cost_suffix()]
 		Type.POTION when max_hp_bonus > 0:
-			return "Consumable  •  Restores %d HP, +%d Max HP" % [heal_amount, max_hp_bonus]
+			return "Consumable  •  Restores %d HP, +%d Max HP%s" % [heal_amount, max_hp_bonus, _cost_suffix()]
 		Type.SPELL_ORB:
-			return "Artifact  •  +%d Spell Points" % sp_amount
+			return "Artifact  •  +%d Souls%s" % [sp_amount, _cost_suffix()]
+		Type.GOLD:
+			return "Coin Pickup  •  +%d¢" % gold_amount
 		Type.RELIC:
+			if gold_cost > 0:
+				var rel_sale := " (50% OFF SALE!)" if is_on_sale else ""
+				return "Shop Relic  •  Price: %d¢%s" % [gold_cost, rel_sale]
 			if hp_cost > 0:
 				return "Devil Deal Relic  •  Costs %d Max HP" % hp_cost
 			return "Rare Relic  •  Permanent Passive"
 		Type.SPELL_PEDESTAL:
+			if gold_cost > 0:
+				var sp_sale := " (50% OFF SALE!)" if is_on_sale else ""
+				return "Shop Spell Tome  •  Price: %d¢%s" % [gold_cost, sp_sale]
 			if hp_cost > 0:
 				return "Devil Deal Spell  •  Costs %d Max HP" % hp_cost
 			return "Angel Blessing Spell  •  Free"
@@ -133,10 +164,16 @@ func type_name() -> String:
 			return "Angel Room Portal (Earned via Flawless Clear!)"
 		Type.TREASURE_PORTAL:
 			return "Golden Treasure Room Portal"
+		Type.SHOP_PORTAL:
+			return "Merchant Shop Portal (Spend Coins!)"
 		Type.RETURN_PORTAL:
 			return "Sanctuary Exit Portal"
+		Type.SHRINE_OF_CHANCE:
+			return "Risk of Rain Altar  •  Offer %d¢ (%d blessing(s) left)" % [gold_cost, uses_left]
+		Type.BLOOD_ALTAR:
+			return "Blood Altar  •  Sacrifice %d HP → Coins & Reward (%d left)" % [hp_cost, uses_left]
 		_:
-			return "Consumable  •  Restores %d HP" % heal_amount
+			return "Consumable  •  Restores %d HP%s" % [heal_amount, _cost_suffix()]
 
 
 func describe_details() -> String:

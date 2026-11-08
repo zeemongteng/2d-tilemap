@@ -5,7 +5,11 @@ extends Node2D
 
 const STEP_TIME := 0.08
 const MAX_INVENTORY := 9
+const MAX_COINS := 99
 const SPELL_HOTKEYS: Array[Key] = [KEY_Q, KEY_W, KEY_E, KEY_F, KEY_G, KEY_C, KEY_Z, KEY_X, KEY_V, KEY_T]
+const PENNY_ITEM: ItemData = preload("res://items/penny.tres")
+const NICKEL_ITEM: ItemData = preload("res://items/nickel.tres")
+const DIME_ITEM: ItemData = preload("res://items/dime.tres")
 const BURN_STATUS: StatusData = preload("res://statuses/burn.tres")
 const POISON_STATUS: StatusData = preload("res://statuses/poison.tres")
 const SHOCK_STATUS: StatusData = preload("res://statuses/shock.tres")
@@ -190,17 +194,25 @@ func _populate_current_room(entry_cell: Vector2i) -> void:
 		if not _is_occupied(relic_cell) and _item_at(relic_cell) == null:
 			_spawn_item(_random_relic(), relic_cell)
 
+	# Spawn a Risk of Rain-style Altar (Shrine of Chance or Altar of Blood) in the room.
+	if _rng.randf() < 0.75:
+		var altar_cell := grid.random_floor_cell(_rng, 3, entry_cell, 3)
+		if not _is_occupied(altar_cell) and _item_at(altar_cell) == null:
+			var altar_data := _create_shrine_of_chance() if _rng.randf() < 0.5 else _create_blood_altar()
+			_spawn_item(altar_data, altar_cell)
+
 
 func _on_next_room_confirmed(edge_cell: Vector2i) -> void:
 	if _busy or _dead or not _room_cleared:
 		return
 	_busy = true
 	var entering_treasure := grid.is_treasure_edge_cell(edge_cell)
-	if not entering_treasure:
+	var entering_shop := (not entering_treasure) and grid.is_shop_edge_cell(edge_cell)
+	if not entering_treasure and not entering_shop:
 		room_level += 1
 	var next_center := grid.get_adjacent_room_center(grid.current_room_center, edge_cell)
-	var boss_room := (not entering_treasure) and _is_boss_room(room_level)
-	grid.generate_room(next_center, edge_cell, boss_room, entering_treasure)
+	var boss_room := (not entering_treasure) and (not entering_shop) and _is_boss_room(room_level)
+	grid.generate_room(next_center, edge_cell, boss_room, entering_treasure, entering_shop)
 
 	# Step 1 hex inward toward the new room center if walkable so the player stands inside the new room.
 	var step_in := edge_cell
@@ -225,6 +237,14 @@ func _on_next_room_confirmed(edge_cell: Vector2i) -> void:
 	if entering_treasure:
 		_populate_treasure_room(next_center)
 		hud.post("⚜ GOLDEN TREASURE ROOM! Claim 1 free pedestal at the center — the other will vanish!")
+		_busy = false
+		_refresh_hud()
+		_refresh_hover()
+		return
+
+	if entering_shop:
+		_populate_shop_room(next_center)
+		hud.post("$ MERCHANT SHOP! Buy items with Coins (%02d¢) — 1 pedestal is on 50%% Half-Off Sale!" % player.gold)
 		_busy = false
 		_refresh_hud()
 		_refresh_hover()
@@ -265,9 +285,17 @@ func _check_edge_trigger() -> bool:
 		hud.post("The passage out of this room is sealed until all monsters are defeated!")
 		return false
 	var is_treasure_door := grid.is_treasure_edge_cell(player.cell)
-	var next_room := room_level if is_treasure_door else (room_level + 1)
-	var next_is_boss := (not is_treasure_door) and _is_boss_room(next_room) and not boss_pool.is_empty()
-	hud.prompt_next_room(next_room, player.cell, next_is_boss, _boss_name_for_room(next_room) if next_is_boss else "", is_treasure_door)
+	var is_shop_door := (not is_treasure_door) and grid.is_shop_edge_cell(player.cell)
+	var next_room := room_level if (is_treasure_door or is_shop_door) else (room_level + 1)
+	var next_is_boss := (not is_treasure_door) and (not is_shop_door) and _is_boss_room(next_room) and not boss_pool.is_empty()
+	hud.prompt_next_room(
+		next_room,
+		player.cell,
+		next_is_boss,
+		_boss_name_for_room(next_room) if next_is_boss else "",
+		is_treasure_door,
+		is_shop_door
+	)
 	return true
 
 
@@ -505,6 +533,301 @@ func _enter_treasure_sanctuary() -> void:
 	hud.post("⚜ Entered the GOLDEN TREASURE VAULT! Choose 1 free pedestal — the other will vanish.")
 	_refresh_hud()
 	_refresh_hover()
+
+
+# --- Merchant Shop & Risk of Rain Altars ----------------------------------
+
+func _roll_coin_item(min_tier := 0) -> ItemData:
+	var luck_stacks := player.count_relic(ItemData.RelicEffect.LUCKY_PENNY) if player != null else 0
+	var dime_chance := clampf(0.03 + 0.04 * float(luck_stacks), 0.03, 0.30)
+	var nickel_chance := clampf(0.15 + 0.10 * float(luck_stacks), 0.15, 0.50)
+	var roll := _rng.randf()
+	if min_tier >= 2 or roll < dime_chance:
+		return DIME_ITEM
+	if min_tier >= 1 or roll < dime_chance + nickel_chance:
+		return NICKEL_ITEM
+	return PENNY_ITEM
+
+
+func _drop_coin_near(origin: Vector2i, min_tier := 0) -> bool:
+	var coin := _roll_coin_item(min_tier)
+	if grid.is_in_current_room(origin) and grid.is_walkable(origin) and origin != player.cell and _item_at(origin) == null:
+		_spawn_item(coin, origin)
+		grid.play_spell_vfx([origin], coin.color)
+		return true
+	for rad in range(1, 4):
+		var candidates := grid.cells_in_radius(origin, rad, true)
+		candidates.shuffle()
+		for c in candidates:
+			if c != player.cell and grid.is_in_current_room(c) and not _is_occupied(c) and _item_at(c) == null:
+				_spawn_item(coin, c)
+				grid.play_spell_vfx([c], coin.color)
+				return true
+	return false
+
+
+func _scatter_coins(origin: Vector2i, count: int, first_min_tier := 0) -> int:
+	var dropped := 0
+	for i in count:
+		var tier := first_min_tier if i == 0 else 0
+		if _drop_coin_near(origin, tier):
+			dropped += 1
+	return dropped
+
+
+func _create_shrine_of_chance() -> ItemData:
+	var shrine := ItemData.new()
+	shrine.type = ItemData.Type.SHRINE_OF_CHANCE
+	shrine.display_name = "Shrine of Chance"
+	shrine.glyph = "⛩"
+	shrine.color = Color(0.35, 0.95, 0.88)
+	shrine.gold_cost = 5 + (room_level - 1)
+	shrine.uses_left = 2
+	shrine.description = "Risk of Rain Altar: Offer %d¢ for a 60%% chance to win a Rare Relic, Gear, Soul Orb, or Consumable! Can grant up to 2 blessings before crumbling." % shrine.gold_cost
+	return shrine
+
+
+func _create_blood_altar() -> ItemData:
+	var altar := ItemData.new()
+	altar.type = ItemData.Type.BLOOD_ALTAR
+	altar.display_name = "Altar of Blood"
+	altar.glyph = "Ψ"
+	altar.color = Color(1.0, 0.25, 0.35)
+	altar.hp_cost = 5 + (room_level - 1)
+	altar.gold_amount = 2
+	altar.uses_left = 2
+	altar.description = "Blood Altar: Sacrifice %d HP to scatter physical Coins onto the floor AND receive a guaranteed Relic or Item reward! Can be used up to 2 times." % altar.hp_cost
+	return altar
+
+
+func _build_shop_offers() -> Array[ItemData]:
+	var offers: Array[ItemData] = []
+	var consumables: Array[ItemData] = []
+	var gear_or_orbs: Array[ItemData] = []
+	for res in item_pool:
+		if res is ItemData:
+			var it := res as ItemData
+			if it.type == ItemData.Type.GOLD:
+				continue
+			if it.type in [ItemData.Type.POTION, ItemData.Type.MANA_POTION, ItemData.Type.BOMB, ItemData.Type.PILL]:
+				consumables.append(it)
+			elif it.type in [ItemData.Type.WEAPON, ItemData.Type.ARMOR, ItemData.Type.SPELL_ORB]:
+				gear_or_orbs.append(it)
+
+	if not consumables.is_empty():
+		var c_offer := consumables[_rng.randi_range(0, consumables.size() - 1)].duplicate() as ItemData
+		c_offer.gold_cost = 5
+		c_offer.hp_cost = 0
+		c_offer.is_on_sale = false
+		offers.append(c_offer)
+
+	if not gear_or_orbs.is_empty():
+		var g_offer := gear_or_orbs[_rng.randi_range(0, gear_or_orbs.size() - 1)].duplicate() as ItemData
+		g_offer.gold_cost = 5
+		g_offer.hp_cost = 0
+		g_offer.is_on_sale = false
+		offers.append(g_offer)
+
+	var spell_candidates: Array[SpellData] = []
+	for res in spell_catalog:
+		if res is SpellData:
+			var sp := res as SpellData
+			if sp.is_innate:
+				continue
+			var learned := player.get_learned_spell(sp.display_name)
+			if learned != null and not learned.can_upgrade():
+				continue
+			spell_candidates.append(sp)
+	if not spell_candidates.is_empty():
+		var sp_pick := spell_candidates[_rng.randi_range(0, spell_candidates.size() - 1)]
+		var learned_sp := player.get_learned_spell(sp_pick.display_name)
+		var ped := ItemData.new()
+		ped.type = ItemData.Type.SPELL_PEDESTAL
+		ped.display_name = sp_pick.display_name if learned_sp == null else "%s (Upgrade)" % sp_pick.display_name
+		ped.description = sp_pick.describe_details()
+		ped.glyph = "★"
+		ped.color = sp_pick.color
+		ped.granted_spell = sp_pick
+		ped.gold_cost = 15
+		ped.hp_cost = 0
+		ped.is_on_sale = false
+		offers.append(ped)
+
+	var rel_template := _random_relic()
+	if rel_template != null:
+		var rel_offer := rel_template.duplicate() as ItemData
+		rel_offer.gold_cost = 15
+		rel_offer.hp_cost = 0
+		rel_offer.is_on_sale = false
+		offers.append(rel_offer)
+
+	# Binding of Isaac Shop Sale: 1 random shop item is 50% Half-Off (15c -> 7c, 5c -> 2c)!
+	if not offers.is_empty():
+		var sale_idx := _rng.randi_range(0, offers.size() - 1)
+		offers[sale_idx].is_on_sale = true
+		offers[sale_idx].gold_cost = maxi(1, offers[sale_idx].gold_cost / 2)
+
+	return offers
+
+
+func _populate_shop_room(center: Vector2i) -> void:
+	_room_cleared = true
+	_active_spell_index = -1
+	grid.set_room_cleared(true)
+	grid.clear_spell_preview()
+	grid.set_danger_cells([])
+
+	var pedestal_cells: Array[Vector2i] = [
+		center + Vector2i(-2, 0),
+		center + Vector2i(-1, -1),
+		center + Vector2i(1, -1),
+		center + Vector2i(2, 0),
+	]
+	var offers := _build_shop_offers()
+	for i in mini(offers.size(), pedestal_cells.size()):
+		_spawn_item(offers[i], pedestal_cells[i], true, false)
+
+	var shrine_cell := center + Vector2i(-1, 2)
+	if grid.is_walkable(shrine_cell) and not _is_occupied(shrine_cell) and _item_at(shrine_cell) == null:
+		_spawn_item(_create_shrine_of_chance(), shrine_cell)
+	var blood_cell := center + Vector2i(1, 1)
+	if grid.is_walkable(blood_cell) and not _is_occupied(blood_cell) and _item_at(blood_cell) == null:
+		_spawn_item(_create_blood_altar(), blood_cell)
+	grid.play_spell_vfx(pedestal_cells, Color(0.25, 0.95, 0.85))
+
+
+func _spawn_shop_portal() -> void:
+	var cell := _find_open_debug_cell(0, true)
+	var sportal := ItemData.new()
+	sportal.display_name = "Merchant Shop Portal"
+	sportal.description = "A teal-gold portal leading to the Merchant Shop.\nStep inside to spend your Coins (¢) on Relics (15¢), Spells (15¢), and Gear (5¢) — with 1 item 50% OFF!"
+	sportal.glyph = "$"
+	sportal.color = Color(0.25, 0.95, 0.82)
+	sportal.type = ItemData.Type.SHOP_PORTAL
+	_spawn_item(sportal, cell)
+	grid.play_spell_vfx([cell], sportal.color)
+
+
+func _enter_shop_sanctuary() -> void:
+	_return_room_cell = player.cell
+	for i in range(items.size() - 1, -1, -1):
+		if items[i].data.type == ItemData.Type.SHOP_PORTAL:
+			items[i].queue_free()
+			items.remove_at(i)
+
+	var sanct_center := Vector2i(-120, -100 - room_level * 20)
+	grid.generate_sanctuary_room(sanct_center, 5, true, "shop")
+	player.place(grid, sanct_center + Vector2i(0, 2))
+
+	var ret_data := ItemData.new()
+	ret_data.display_name = "Return Portal"
+	ret_data.description = "Step onto this portal to teleport back to Room %d." % room_level
+	ret_data.glyph = "O"
+	ret_data.color = Color(0.45, 0.95, 0.75)
+	ret_data.type = ItemData.Type.RETURN_PORTAL
+	_spawn_item(ret_data, sanct_center + Vector2i(0, 3))
+
+	var pedestal_cells: Array[Vector2i] = [
+		sanct_center + Vector2i(-2, 0),
+		sanct_center + Vector2i(-1, -2),
+		sanct_center + Vector2i(1, -2),
+		sanct_center + Vector2i(2, -1),
+	]
+	var offers := _build_shop_offers()
+	for i in mini(offers.size(), pedestal_cells.size()):
+		_spawn_item(offers[i], pedestal_cells[i], true, false)
+
+	_spawn_item(_create_shrine_of_chance(), sanct_center + Vector2i(-2, 2))
+	_spawn_item(_create_blood_altar(), sanct_center + Vector2i(2, 1))
+
+	grid.play_spell_vfx([player.cell], Color(0.25, 0.95, 0.85))
+	hud.post("$ Entered the MERCHANT SHOP! Spend Coins (%02d¢) on pedestals — 1 item is 50%% OFF!" % player.gold)
+	_refresh_hud()
+	_refresh_hover()
+
+
+func _grant_altar_reward(origin_cell: Vector2i, altar_name: String, high_relic_odds := false) -> void:
+	var relic_chance := 0.50 if high_relic_odds else 0.35
+	relic_chance += 0.10 * float(player.count_relic(ItemData.RelicEffect.LUCKY_PENNY))
+	if _rng.randf() < relic_chance:
+		var rel := _random_relic()
+		if rel != null:
+			var rel_copy := rel.duplicate() as ItemData
+			rel_copy.hp_cost = 0
+			rel_copy.gold_cost = 0
+			_acquire_relic(rel_copy)
+			grid.play_spell_vfx([origin_cell, player.cell], rel_copy.color)
+			hud.post("★ %s bestows a Rare Relic: %s! %s" % [altar_name, rel_copy.display_name, rel_copy.description])
+			return
+
+	var non_gold_items: Array[ItemData] = []
+	for res in item_pool:
+		if res is ItemData and (res as ItemData).type != ItemData.Type.GOLD:
+			non_gold_items.append(res as ItemData)
+	if non_gold_items.is_empty():
+		return
+	var reward := non_gold_items[_rng.randi_range(0, non_gold_items.size() - 1)].duplicate() as ItemData
+	reward.hp_cost = 0
+	reward.gold_cost = 0
+	if reward.type == ItemData.Type.SPELL_ORB:
+		player.spell_points += reward.sp_amount
+		hud.post("★ %s grants %s (+%d Souls)!" % [altar_name, reward.display_name, reward.sp_amount])
+	elif player.inventory.size() < MAX_INVENTORY:
+		player.inventory.append(reward)
+		hud.post("★ %s grants %s (added to pack)!" % [altar_name, reward.display_name])
+	else:
+		var drop_cell := _find_open_debug_cell(0, true)
+		_spawn_item(reward, drop_cell)
+		hud.post("★ %s drops %s nearby!" % [altar_name, reward.display_name])
+	grid.play_spell_vfx([origin_cell, player.cell], reward.color)
+
+
+func _interact_shrine_of_chance(item: WorldItem) -> void:
+	var cost := item.data.gold_cost
+	if player.gold < cost:
+		hud.post("⛩ You need %d¢ to pray at the Shrine of Chance (you have %02d¢)!" % [cost, player.gold])
+		return
+	player.gold -= cost
+	var win_chance := clampf(0.60 + 0.12 * float(player.count_relic(ItemData.RelicEffect.LUCKY_PENNY)), 0.60, 0.95)
+	if _rng.randf() < win_chance:
+		item.data.uses_left -= 1
+		_grant_altar_reward(item.cell, "Shrine of Chance (-%d¢)" % cost, false)
+	else:
+		grid.play_spell_vfx([item.cell], Color(0.55, 0.6, 0.65))
+		hud.post("⛩ You offer %d¢ to the Shrine of Chance... You gain nothing." % cost)
+	item.data.gold_cost = int(ceil(float(item.data.gold_cost) * 1.5))
+	item.data.description = "Risk of Rain Altar: Offer %d¢ for a 60%% chance to win a Rare Relic, Gear, Soul Orb, or Consumable! (%d blessing(s) left)." % [item.data.gold_cost, item.data.uses_left]
+	item.queue_redraw()
+	if item.data.uses_left <= 0:
+		hud.post("⛩ The Shrine of Chance has bestowed 2 blessings and crumbles to dust!")
+		items.erase(item)
+		item.queue_free()
+
+
+func _interact_blood_altar(item: WorldItem) -> void:
+	var hp_sacrifice := item.data.hp_cost
+	if player.stats.hp <= hp_sacrifice:
+		hud.post("🩸 You need more than %d HP to sacrifice at the Altar of Blood!" % hp_sacrifice)
+		return
+	player.stats.hp -= hp_sacrifice
+	_room_damage_taken += hp_sacrifice
+	player.modulate = Color(1.0, 0.25, 0.3)
+	create_tween().tween_property(player, "modulate", Color.WHITE, 0.3)
+	player.queue_redraw()
+
+	var coins_spawned := _scatter_coins(item.cell, item.data.gold_amount, 1)
+	item.data.uses_left -= 1
+	hud.post("🩸 You sacrifice %d HP at the Altar of Blood — %d coin(s) spill across the floor!" % [hp_sacrifice, coins_spawned])
+	_grant_altar_reward(item.cell, "Altar of Blood", true)
+
+	item.data.hp_cost = int(ceil(float(item.data.hp_cost) * 1.5))
+	item.data.gold_amount += 1
+	item.data.description = "Blood Altar: Sacrifice %d HP to scatter physical Coins onto the floor AND receive a guaranteed Relic or Item reward! (%d left)." % [item.data.hp_cost, item.data.uses_left]
+	item.queue_redraw()
+	if item.data.uses_left <= 0:
+		hud.post("🩸 The Altar of Blood drinks its fill and crumbles away!")
+		items.erase(item)
+		item.queue_free()
 
 
 func _spawn_actor(scene: PackedScene, cell: Vector2i) -> Actor:
@@ -877,7 +1200,7 @@ func _init_debug_catalog() -> void:
 		seen_paths.append(sc.resource_path)
 		var temp := sc.instantiate() as Actor
 		if temp != null:
-			var label_suffix := " (7-Hex Boss)" if temp.is_boss else (" (Spawner)" if temp.is_spawner else "")
+			var label_suffix := (" (7-Hex Boss)" if temp.footprint_radius > 0 else " (Boss)") if temp.is_boss else (" (Spawner)" if temp.is_spawner else "")
 			monster_entries.append({
 				"scene": sc,
 				"name": temp.display_name.capitalize() + label_suffix,
@@ -898,7 +1221,7 @@ func _init_debug_catalog() -> void:
 				seen_names.append(it.display_name)
 				all_relics.append(it)
 
-	for res in item_pool:
+	for res in item_pool + [PENNY_ITEM, NICKEL_ITEM, DIME_ITEM]:
 		if res is ItemData:
 			var it := res as ItemData
 			if not seen_names.has(it.display_name):
@@ -950,7 +1273,11 @@ func _on_debug_action_requested(action: String) -> void:
 			hud.post("[Debug] Restored full HP, recharged all spells, and refreshed shields!")
 		"add_sp":
 			player.spell_points += 5
-			hud.post("[Debug] Added +5 Spell Points (SP)!")
+			hud.post("[Debug] Added +5 Souls!")
+		"add_gold":
+			player.gold = mini(MAX_COINS, player.gold + 25)
+			grid.play_spell_vfx([player.cell], Color(1.0, 0.88, 0.25))
+			hud.post("[Debug] Added +25¢ Coins (total %02d¢)!" % player.gold)
 		"kill_all":
 			var hostiles := _hostile_actors()
 			for h in hostiles:
@@ -960,6 +1287,19 @@ func _on_debug_action_requested(action: String) -> void:
 			grid.set_danger_cells([])
 			hud.post("[Debug] Slain %d hostile creature(s)!" % hostiles.size())
 			_check_room_cleared()
+		"spawn_shrine_chance":
+			var scell := _find_open_debug_cell(0, true)
+			_spawn_item(_create_shrine_of_chance(), scell)
+			grid.play_spell_vfx([scell], Color(0.35, 0.95, 0.88))
+			hud.post("[Debug] Spawned a Shrine of Chance (⛩) at %s!" % str(scell))
+		"spawn_blood_altar":
+			var bcell := _find_open_debug_cell(0, true)
+			_spawn_item(_create_blood_altar(), bcell)
+			grid.play_spell_vfx([bcell], Color(1.0, 0.25, 0.35))
+			hud.post("[Debug] Spawned an Altar of Blood (Ψ) at %s!" % str(bcell))
+		"spawn_shop_portal":
+			_spawn_shop_portal()
+			hud.post("[Debug] Spawned a Merchant Shop Portal ($) nearby!")
 		"spawn_devil_portal":
 			_spawn_deal_portals(true, false)
 			hud.post("[Debug] Spawned a Devil Room Portal (ψ) nearby!")
@@ -969,6 +1309,12 @@ func _on_debug_action_requested(action: String) -> void:
 		"spawn_treasure_portal":
 			_spawn_treasure_portal()
 			hud.post("[Debug] Spawned a Treasure Room Portal (⚜) nearby!")
+		"enter_shop_room":
+			hud.close_debug_menu()
+			if grid.in_sanctuary:
+				_exit_sanctuary()
+			_enter_shop_sanctuary()
+			return
 		"enter_devil_room":
 			hud.close_debug_menu()
 			if grid.in_sanctuary:
@@ -1039,7 +1385,10 @@ func _on_debug_spawn_item_requested(item: ItemData, grant_directly: bool) -> voi
 				hud.post("[Debug] Granted Relic: %s!" % copy.display_name)
 			ItemData.Type.SPELL_ORB:
 				player.spell_points += copy.sp_amount
-				hud.post("[Debug] Granted +%d Spell Points!" % copy.sp_amount)
+				hud.post("[Debug] Granted +%d Souls!" % copy.sp_amount)
+			ItemData.Type.GOLD:
+				player.gold = mini(MAX_COINS, player.gold + copy.gold_amount)
+				hud.post("[Debug] Granted +%d¢ Coins (total %02d¢)!" % [copy.gold_amount, player.gold])
 			ItemData.Type.WEAPON:
 				player.weapon = copy
 				hud.post("[Debug] Equipped %s!" % copy.describe())
@@ -1666,7 +2015,7 @@ func _use_item(index: int) -> void:
 			hud.post("You drink the %s (+%d charges to all spells)." % [item.display_name.to_lower(), item.charge_restore])
 		ItemData.Type.SPELL_ORB:
 			player.spell_points += item.sp_amount
-			hud.post("You absorb the %s (+%d SP)." % [item.display_name.to_lower(), item.sp_amount])
+			hud.post("You absorb the %s (+%d Souls)." % [item.display_name.to_lower(), item.sp_amount])
 		ItemData.Type.RELIC:
 			_acquire_relic(item)
 			hud.post("★ RELIC ACQUIRED: %s! %s" % [item.display_name, item.description])
@@ -1715,7 +2064,7 @@ func _swallow_pill() -> void:
 			hud.post("You swallow a pill... Surge! (+2 charges to all spells)")
 		2:
 			player.spell_points += 2
-			hud.post("You swallow a pill... Insight! (+2 SP)")
+			hud.post("You swallow a pill... Insight! (+2 Souls)")
 		3:
 			player.heal(12)
 			hud.post("You swallow a pill... Vigor! (+12 HP)")
@@ -1783,12 +2132,56 @@ func _pickup() -> bool:
 	if item.data.type == ItemData.Type.TREASURE_PORTAL:
 		_enter_treasure_sanctuary()
 		return true
+	if item.data.type == ItemData.Type.SHOP_PORTAL:
+		_enter_shop_sanctuary()
+		return true
 	if item.data.type == ItemData.Type.RETURN_PORTAL:
 		items.erase(item)
 		item.queue_free()
 		_exit_sanctuary()
 		return true
+	if item.data.type == ItemData.Type.SHRINE_OF_CHANCE:
+		_interact_shrine_of_chance(item)
+		return true
+	if item.data.type == ItemData.Type.BLOOD_ALTAR:
+		_interact_blood_altar(item)
+		return true
 	if item.is_pedestal:
+		if item.data.gold_cost > 0:
+			if player.gold < item.data.gold_cost:
+				hud.post("$ You need %d¢ to buy %s (you have %02d¢)!" % [item.data.gold_cost, item.data.display_name, player.gold])
+				return true
+			if item.data.type not in [ItemData.Type.RELIC, ItemData.Type.SPELL_PEDESTAL, ItemData.Type.SPELL_ORB] and player.inventory.size() >= MAX_INVENTORY:
+				hud.post("Your pack is too full to buy %s!" % item.data.display_name)
+				return true
+			player.gold -= item.data.gold_cost
+			var sale_tag := " [50% OFF SALE!]" if item.data.is_on_sale else ""
+			var paid_note := " (-%d¢%s)" % [item.data.gold_cost, sale_tag]
+			if item.data.type == ItemData.Type.SPELL_PEDESTAL and item.data.granted_spell != null:
+				var existing_sp := player.get_learned_spell(item.data.granted_spell.display_name)
+				if existing_sp != null and existing_sp.can_upgrade():
+					var shop_branch := existing_sp.upgrade()
+					hud.post("$ SHOP PURCHASE: Upgraded %s to Lv.%d%s%s!" % [existing_sp.display_name, existing_sp.level, paid_note, _branch_note(shop_branch)])
+				else:
+					var learned_sp := player.learn_spell(item.data.granted_spell)
+					hud.post("$ SHOP PURCHASE: Learned %s%s!" % [learned_sp.display_name, paid_note])
+			elif item.data.type == ItemData.Type.RELIC:
+				item.data.gold_cost = 0
+				item.data.is_on_sale = false
+				_acquire_relic(item.data)
+				hud.post("$ SHOP PURCHASE: %s%s! %s" % [item.data.display_name, paid_note, item.data.description])
+			elif item.data.type == ItemData.Type.SPELL_ORB:
+				player.spell_points += item.data.sp_amount
+				hud.post("$ SHOP PURCHASE: %s (+%d Souls)%s!" % [item.data.display_name, item.data.sp_amount, paid_note])
+			else:
+				item.data.gold_cost = 0
+				item.data.is_on_sale = false
+				player.inventory.append(item.data)
+				hud.post("$ SHOP PURCHASE: Added %s to pack%s!" % [item.data.display_name, paid_note])
+			grid.play_spell_vfx([player.cell], item.data.color)
+			items.erase(item)
+			item.queue_free()
+			return true
 		if item.data.hp_cost > 0:
 			if player.stats.max_hp <= item.data.hp_cost:
 				hud.post("You need more than %d Max HP to sign this Devil Pact!" % item.data.hp_cost)
@@ -1824,7 +2217,15 @@ func _pickup() -> bool:
 	if item.data.type == ItemData.Type.SPELL_ORB:
 		player.spell_points += item.data.sp_amount
 		items.erase(item)
-		hud.post("You absorb a %s (+%d SP)!" % [item.data.display_name, item.data.sp_amount])
+		hud.post("You absorb a %s (+%d Souls)!" % [item.data.display_name, item.data.sp_amount])
+		item.queue_free()
+		return true
+	if item.data.type == ItemData.Type.GOLD:
+		var gain := maxi(1, item.data.gold_amount)
+		player.gold = mini(MAX_COINS, player.gold + gain)
+		items.erase(item)
+		grid.play_spell_vfx([player.cell], item.data.color)
+		hud.post("¢ You pick up a %s (+%d¢, total %02d¢)!" % [item.data.display_name, gain, player.gold])
 		item.queue_free()
 		return true
 	if player.inventory.size() >= MAX_INVENTORY:
@@ -1842,6 +2243,14 @@ func _pickup() -> bool:
 func _apply_damage_to_actor(defender: Actor, amount: int, color := Color(1, 0.3, 0.3)) -> int:
 	var phoenix_before := defender.phoenix_charges
 	var evaded := defender.evade_turns > 0 and amount > 0
+	if defender.is_boss and defender.boss_gimmick == "bone_guard" and not defender.is_enraged:
+		var bone_guards := 0
+		for minion in monsters:
+			if is_instance_valid(minion) and not minion.is_dead() and not minion.is_allies and minion.display_name.to_lower().contains("skeleton"):
+				bone_guards += 1
+		if bone_guards > 0:
+			amount = maxi(1, int(ceil(float(amount) * 0.5)))
+			hud.post("🦴 Bone Guard halves the damage! Destroy the living skeleton guards.")
 	var actual := defender.take_damage(amount, color)
 	if defender == player:
 		if actual == 0 and amount > 0:
@@ -1961,6 +2370,7 @@ func _handle_monster_death(defender: Actor) -> void:
 		defender.telegraph_cells.clear()
 		grid.set_danger_cells([])
 	_kills += 1
+	var luck := 1.0 + 0.5 * player.count_relic(ItemData.RelicEffect.LUCKY_PENNY)
 	var sp_gain := 3 if defender.is_boss else (1 if (defender.is_spawner or _kills % 2 == 0) else 0)
 	player.spell_points += sp_gain
 	var blood_heal := 2 * player.count_relic(ItemData.RelicEffect.BURNING_BLOOD) + 3 * player.count_relic(ItemData.RelicEffect.VAMPIRIC_MAW)
@@ -1970,7 +2380,7 @@ func _handle_monster_death(defender: Actor) -> void:
 		player.heal(blood_heal)
 	var bonus_notes: Array[String] = []
 	if sp_gain > 0:
-		bonus_notes.append("+%d SP" % sp_gain)
+		bonus_notes.append("+%d Soul%s" % [sp_gain, "s" if sp_gain > 1 else ""])
 	if blood_heal > 0:
 		bonus_notes.append("+%d HP" % blood_heal)
 	var soul_stacks := player.count_relic(ItemData.RelicEffect.SOUL_VESSEL)
@@ -1979,10 +2389,9 @@ func _handle_monster_death(defender: Actor) -> void:
 		player.heal(soul_stacks)
 		bonus_notes.append("Soul Vessel +%d Max HP" % soul_stacks)
 	var note_str := " (%s)" % ", ".join(bonus_notes) if not bonus_notes.is_empty() else ""
-	var luck := 1.0 + 0.5 * player.count_relic(ItemData.RelicEffect.LUCKY_PENNY)
 
 	if defender.is_boss:
-		hud.post("★ BOSS VANQUISHED: %s falls!%s Dropped a Relic and Mana Potion!" % [defender.display_name, note_str])
+		hud.post("★ BOSS VANQUISHED: %s falls!%s Dropped a Relic, Mana Potion, and Coins!" % [defender.display_name, note_str])
 		if _item_at(defender.cell) == null:
 			_spawn_item(_random_relic(), defender.cell)
 		for n in grid.walkable_neighbors(defender.cell):
@@ -1992,6 +2401,7 @@ func _handle_monster_death(defender: Actor) -> void:
 						_spawn_item(it_res as ItemData, n)
 						break
 				break
+		_scatter_coins(defender.cell, 3, 1)
 	else:
 		hud.post("%s is destroyed!%s" % [defender.display_name, note_str] if defender.is_spawner else "%s dies.%s" % [defender.display_name, note_str])
 		if _item_at(defender.cell) == null:
@@ -2001,6 +2411,11 @@ func _handle_monster_death(defender: Actor) -> void:
 				_spawn_item(_random_relic(), defender.cell)
 			elif _rng.randf() < defender.loot_chance * luck:
 				_spawn_item(_random_item(), defender.cell)
+		# Physical TBOI Coin drops on the floor:
+		if defender.is_spawner or defender.is_elite:
+			_scatter_coins(defender.cell, 2 if _rng.randf() < 0.45 * luck else 1, 0)
+		elif _rng.randf() < 0.55 * luck:
+			_drop_coin_near(defender.cell, 0)
 
 	var death_cell := defender.cell
 	var death_color := defender.color
@@ -2110,6 +2525,7 @@ func _check_room_cleared() -> void:
 	grid.set_danger_cells([])
 	player.spell_points += 2
 	player.restore_all_spells(1)
+	_drop_coin_near(player.cell, 0)
 	var blood_stacks := player.count_relic(ItemData.RelicEffect.BURNING_BLOOD)
 	if blood_stacks > 0:
 		player.heal(5 * blood_stacks)
@@ -2125,7 +2541,7 @@ func _check_room_cleared() -> void:
 	if earned_angel:
 		deal_notes.append("† Angel Portal (Flawless Clear)")
 	var portal_msg := " Opened: %s!" % " & ".join(deal_notes) if not deal_notes.is_empty() else ""
-	hud.post("★ ROOM %d CLEARED! (+2 SP, +1 spell charge).%s" % [room_level, portal_msg])
+	hud.post("★ ROOM %d CLEARED! (+2 Souls, +1 spell charge, Coin drop).%s" % [room_level, portal_msg])
 	_check_edge_trigger()
 
 
@@ -2262,9 +2678,28 @@ func _boss_act(boss: Actor) -> Tween:
 		boss.telegraph_cells.clear()
 		boss.telegraph_mode = 0
 		grid.set_danger_cells([])
-		var vfx_col := Color(1.0, 0.55, 0.15) if mode == 2 else Color(1.0, 0.25, 0.2)
+		var vfx_col := Color(1.0, 0.25, 0.2)
+		var atk_name := "Ground Slam"
+		match mode:
+			2:
+				vfx_col = Color(1.0, 0.55, 0.15)
+				atk_name = "6-Way Starburst Cataclysm"
+			3:
+				vfx_col = Color(0.95, 0.25, 0.8)
+				atk_name = "Rift Collapse"
+			4:
+				vfx_col = Color(1.0, 0.35, 0.08)
+				atk_name = "Pyre Line"
+			5:
+				vfx_col = Color(0.62, 0.9, 0.25)
+				atk_name = "Venomous Web Ring"
+			6:
+				vfx_col = Color(0.45, 0.92, 1.0)
+				atk_name = "Whiteout Blizzard"
+			7:
+				vfx_col = Color(1.0, 0.94, 0.3)
+				atk_name = "Skybreaker Cross"
 		grid.play_spell_vfx(slam_cells, vfx_col)
-		var atk_name := "6-Way Starburst Cataclysm" if mode == 2 else "Ground Slam"
 		var hit_any := false
 		if slam_cells.has(player.cell):
 			hit_any = true
@@ -2272,9 +2707,23 @@ func _boss_act(boss: Actor) -> Tween:
 			var dealt := _apply_damage_to_actor(player, dmg, vfx_col)
 			if dealt > 0:
 				hud.post("💥 %s's %s hits you for %d!" % [boss.display_name, atk_name, dealt])
-				if mode == 2 and not player.is_dead():
-					var boss_status := boss.on_hit_status if boss.on_hit_status != null else FEAR_STATUS
-					player.apply_status(boss_status, 2)
+				if not player.is_dead():
+					match mode:
+						2:
+							var boss_status := boss.on_hit_status if boss.on_hit_status != null else FEAR_STATUS
+							player.apply_status(boss_status, 2)
+						3:
+							player.apply_status(HEXED_STATUS, 2)
+							player.apply_status(STUN_STATUS, 1)
+						4:
+							player.apply_status(BURN_STATUS, 3)
+						5:
+							player.apply_status(POISON_STATUS, 3)
+							player.apply_status(STUN_STATUS, 1)
+						6:
+							player.apply_status(FREEZE_STATUS, 2)
+						7:
+							player.apply_status(SHOCK_STATUS, 3)
 			if player.is_dead():
 				_dead = true
 				hud.post("You are felled by %s. Press R to start over." % boss.display_name.to_lower())
@@ -2317,8 +2766,72 @@ func _boss_act(boss: Actor) -> Tween:
 			hud.post("%s summons %s!" % [boss.display_name, minion.display_name.to_lower()])
 			return null
 
-	# 3a. Second Boss Mechanic: Telegraph a 6-Way Starburst Cataclysm along all 6 cardinal hex lines.
+	# 3a. Boss-specific telegraphed gimmicks.
 	var dist_to_player := boss.distance_to_cell(player.cell)
+	if boss.ability2_cooldown <= 0 and dist_to_player <= 8 and boss.boss_gimmick == "pyre_line":
+		boss.ability2_cooldown = 2 if boss.is_enraged else 3
+		boss.telegraph_mode = 4
+		boss.telegraph_cells = grid.hex_line(boss.cell, player.cell, true)
+		boss.telegraph_cells.erase(boss.cell)
+		grid.set_danger_cells(boss.telegraph_cells)
+		hud.post("⚠ %s traces a Pyre Line! Leave the burning line before it ignites!" % boss.display_name)
+		return null
+	if boss.ability2_cooldown <= 0 and boss.boss_gimmick == "rift_collapse":
+		boss.ability2_cooldown = 3 if boss.is_enraged else 4
+		boss.telegraph_mode = 3
+		boss.telegraph_cells = grid.cells_in_radius(boss.cell, boss.footprint_radius + 1, true)
+		for occupied in boss.occupied_cells():
+			boss.telegraph_cells.erase(occupied)
+		grid.set_danger_cells(boss.telegraph_cells)
+		hud.post("⚠ %s destabilizes the ground around its body! Move away from the rift collapse!" % boss.display_name)
+		return null
+	if boss.ability2_cooldown <= 0 and dist_to_player <= 7 and boss.boss_gimmick == "venom_web":
+		boss.ability2_cooldown = 3 if boss.is_enraged else 4
+		boss.telegraph_mode = 5
+		var web_cells: Array[Vector2i] = []
+		for c in grid.cells_in_radius(player.cell, 3, true):
+			var d := HexGrid.distance(c, player.cell)
+			if (d == 1 or d == 2) and not boss.occupies_cell(c):
+				web_cells.append(c)
+		boss.telegraph_cells = web_cells
+		grid.set_danger_cells(boss.telegraph_cells)
+		hud.post("⚠ %s spins a Venomous Web Ring! Hold the center eye or dash outside the ring!" % boss.display_name)
+		return null
+	if boss.ability2_cooldown <= 0 and boss.boss_gimmick == "whiteout_ring":
+		boss.ability2_cooldown = 3 if boss.is_enraged else 4
+		boss.telegraph_mode = 6
+		var blizzard_cells: Array[Vector2i] = []
+		for c in grid.cells_in_radius(boss.cell, 7, true):
+			if HexGrid.distance(c, boss.cell) >= 3 and grid.is_in_current_room(c):
+				blizzard_cells.append(c)
+		boss.telegraph_cells = blizzard_cells
+		grid.set_danger_cells(boss.telegraph_cells)
+		hud.post("⚠ %s channels a Whiteout Blizzard! Rush inside the 2-hex eye near the boss!" % boss.display_name)
+		return null
+	if boss.ability2_cooldown <= 0 and boss.boss_gimmick == "storm_cross":
+		boss.ability2_cooldown = 2 if boss.is_enraged else 3
+		# Blink to an open hex 3-5 hexes from the player before calling down lightning!
+		var blink_candidates: Array[Vector2i] = []
+		for c in grid.cells_in_radius(player.cell, 5, true):
+			var d := HexGrid.distance(c, player.cell)
+			if d >= 3 and d <= 5 and grid.is_in_current_room(c) and not _is_occupied(c):
+				blink_candidates.append(c)
+		if not blink_candidates.is_empty():
+			var old_cell := boss.cell
+			var new_cell := blink_candidates[_rng.randi_range(0, blink_candidates.size() - 1)]
+			boss.place(grid, new_cell)
+			grid.play_spell_vfx([old_cell, new_cell], boss.color, [grid.cell_to_pixel(old_cell), grid.cell_to_pixel(new_cell)])
+		boss.telegraph_mode = 7
+		var cross_cells: Array[Vector2i] = [player.cell]
+		for dir in HexGrid.DIRECTIONS:
+			for step in range(1, 5):
+				var cc := player.cell + dir * step
+				if grid.is_walkable(cc) and grid.is_in_current_room(cc) and not boss.occupies_cell(cc) and not cross_cells.has(cc):
+					cross_cells.append(cc)
+		boss.telegraph_cells = cross_cells
+		grid.set_danger_cells(boss.telegraph_cells)
+		hud.post("⚠ %s blinks and locks a Skybreaker Cross onto you! Sidestep off the 6 lightning rays!" % boss.display_name)
+		return null
 	if boss.ability2_cooldown <= 0 and dist_to_player <= 7:
 		boss.ability2_cooldown = 3 if boss.is_enraged else 4
 		boss.telegraph_mode = 2

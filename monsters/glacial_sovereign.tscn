@@ -1,0 +1,32 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://actor.gd" id="1_actor"]
+[ext_resource type="Script" path="res://stats.gd" id="2_stats"]
+[ext_resource type="PackedScene" path="res://monsters/frost_wisp.tscn" id="3_wisp"]
+[ext_resource type="Resource" path="res://statuses/freeze.tres" id="4_freeze"]
+[ext_resource type="Resource" path="res://spells/monster_cold_snap.tres" id="5_cold_snap"]
+
+[sub_resource type="Resource" id="Resource_stats"]
+script = ExtResource("2_stats")
+max_hp = 38
+attack = 5
+defense = 1
+
+[node name="GlacialSovereign" type="Node2D"]
+script = ExtResource("1_actor")
+display_name = "The Glacial Sovereign"
+description = "Rime-crowned monarch of the frozen depths. Summons frost wisps and channels a Whiteout Blizzard that freezes the outer arena — close in near the sovereign to survive!"
+glyph = "Ж"
+color = Color(0.45, 0.9, 1, 1)
+font_size = 40
+stats = SubResource("Resource_stats")
+loot_chance = 1.0
+attack_range = 4
+spawn_interval = 4
+spawn_scene = ExtResource("3_wisp")
+is_boss = true
+boss_gimmick = "whiteout_ring"
+slam_damage = 6
+on_hit_status = ExtResource("4_freeze")
+on_hit_status_duration = 2
+monster_spells = Array[Resource]([ExtResource("5_cold_snap")])

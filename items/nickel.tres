@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Nickel"
+description = "A heavy silver-gleaming coin worth 5 pennies (+5¢)!"
+glyph = "¢"
+color = Color(0.76, 0.88, 0.98, 1)
+type = 13
+gold_amount = 5

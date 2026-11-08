@@ -37,7 +37,9 @@ var current_room_center := Vector2i.ZERO
 var generated_rooms: Array[Vector2i] = []
 var exit_cells: Array[Vector2i] = []
 var treasure_exit_cells: Array[Vector2i] = []
+var shop_exit_cells: Array[Vector2i] = []
 var treasure_face := -1
+var shop_face := -1
 var room_cleared := false
 var in_sanctuary := false
 var active_sanctuary_center := Vector2i.ZERO
@@ -260,7 +262,7 @@ func exit_sanctuary_room() -> void:
 
 ## Generates a room of `radius` centered at `center` while preserving any shared boundary tiles
 ## from already-generated adjacent rooms so walls and doorways connect seamlessly.
-func generate_room(center: Vector2i, entry_cell: Vector2i, is_boss_room := false, is_treasure_room := false) -> void:
+func generate_room(center: Vector2i, entry_cell: Vector2i, is_boss_room := false, is_treasure_room := false, is_shop_room := false) -> void:
 	current_room_center = center
 	danger_cells.clear()
 	if not generated_rooms.has(center):
@@ -274,12 +276,14 @@ func generate_room(center: Vector2i, entry_cell: Vector2i, is_boss_room := false
 			region.append(c)
 			if is_treasure_room:
 				_sanctuary_themes[c] = "treasure"
+			elif is_shop_room:
+				_sanctuary_themes[c] = "shop"
 			if _tiles.has(c):
 				locked[c] = true
 			elif distance(c, center) == radius:
 				# Outer rim defaults to solid cave wall until exit doorways are carved.
 				_tiles[c] = true
-			elif is_treasure_room:
+			elif is_treasure_room or is_shop_room:
 				_tiles[c] = (distance(c, center) >= 6 and _rng.randf() < 0.25)
 			else:
 				_tiles[c] = _rng.randf() < fill_chance
@@ -304,7 +308,7 @@ func generate_room(center: Vector2i, entry_cell: Vector2i, is_boss_room := false
 			_tiles[c] = next[c]
 
 	# Guarantee open ground around the room's center and around the entry cell.
-	var open_center_radius := 5 if (is_boss_room or is_treasure_room) else 2
+	var open_center_radius := 5 if (is_boss_room or is_treasure_room or is_shop_room) else 2
 	for c in region:
 		if distance(c, center) <= open_center_radius and not locked.has(c):
 			_tiles[c] = false
@@ -337,10 +341,20 @@ func generate_room(center: Vector2i, entry_cell: Vector2i, is_boss_room := false
 				if locked.has(c) and not _tiles[c] and get_face_index(center, c) == face_idx:
 					_carve_corridor(c, center, locked)
 
-	if not is_boss_room and not is_treasure_room and not unvisited_faces.is_empty():
-		treasure_face = unvisited_faces[_rng.randi_range(0, unvisited_faces.size() - 1)]
+	if not is_boss_room and not is_treasure_room and not is_shop_room and not unvisited_faces.is_empty():
+		var t_idx := _rng.randi_range(0, unvisited_faces.size() - 1)
+		treasure_face = unvisited_faces[t_idx]
+		var remaining_faces: Array[int] = []
+		for f in unvisited_faces:
+			if f != treasure_face:
+				remaining_faces.append(f)
+		if not remaining_faces.is_empty():
+			shop_face = remaining_faces[_rng.randi_range(0, remaining_faces.size() - 1)]
+		else:
+			shop_face = -1
 	else:
 		treasure_face = -1
+		shop_face = -1
 
 	# Fill in unreachable interior pockets inside this room.
 	var reachable := {center: true}
@@ -375,15 +389,23 @@ func _carve_corridor(from: Vector2i, to: Vector2i, locked: Dictionary) -> void:
 func _refresh_exit_cells() -> void:
 	exit_cells.clear()
 	treasure_exit_cells.clear()
+	shop_exit_cells.clear()
 	for c in _cells:
 		if is_unvisited_edge_cell(c):
 			exit_cells.append(c)
-			if treasure_face >= 0 and get_face_index(current_room_center, c) == treasure_face:
+			var face := get_face_index(current_room_center, c)
+			if treasure_face >= 0 and face == treasure_face:
 				treasure_exit_cells.append(c)
+			elif shop_face >= 0 and face == shop_face:
+				shop_exit_cells.append(c)
 
 
 func is_treasure_edge_cell(cell: Vector2i) -> bool:
 	return treasure_exit_cells.has(cell)
+
+
+func is_shop_edge_cell(cell: Vector2i) -> bool:
+	return shop_exit_cells.has(cell)
 
 
 func set_room_cleared(cleared: bool) -> void:
@@ -510,6 +532,9 @@ func _draw() -> void:
 			elif _sanctuary_themes[c] == "treasure":
 				base_col = Color("1f1806") if _tiles[c] else Color("382c0b")
 				cur_line = Color("d9af3b")
+			elif _sanctuary_themes[c] == "shop":
+				base_col = Color("0c1c1e") if _tiles[c] else Color("173438")
+				cur_line = Color("45c4b0")
 			else:
 				base_col = Color("101b24") if _tiles[c] else Color("1f3345")
 				cur_line = Color("78b5db")
@@ -524,12 +549,17 @@ func _draw() -> void:
 	var exit_fill := Color(exit_col.r, exit_col.g, exit_col.b, 0.22 if room_cleared else 0.1)
 	var gold_col := Color(1.0, 0.86, 0.25, 0.92) if room_cleared else Color(0.85, 0.68, 0.18, 0.55)
 	var gold_fill := Color(1.0, 0.85, 0.22, 0.32 if room_cleared else 0.14)
+	var shop_col := Color(0.25, 0.95, 0.85, 0.92) if room_cleared else Color(0.2, 0.65, 0.6, 0.55)
+	var shop_fill := Color(0.22, 0.92, 0.82, 0.32 if room_cleared else 0.14)
 	for c in exit_cells:
 		var is_treasure_door := treasure_exit_cells.has(c)
+		var is_shop_door := shop_exit_cells.has(c)
 		var poly := _hex_polygon(cell_to_pixel(c))
-		draw_colored_polygon(poly, gold_fill if is_treasure_door else exit_fill)
+		var d_fill := gold_fill if is_treasure_door else (shop_fill if is_shop_door else exit_fill)
+		var d_col := gold_col if is_treasure_door else (shop_col if is_shop_door else exit_col)
+		draw_colored_polygon(poly, d_fill)
 		poly.append(poly[0])
-		draw_polyline(poly, gold_col if is_treasure_door else exit_col, 2.5 if is_treasure_door else 2.0)
+		draw_polyline(poly, d_col, 2.5 if (is_treasure_door or is_shop_door) else 2.0)
 
 	# Draw telegraphed boss Ground Slam danger hexes.
 	if not danger_cells.is_empty():

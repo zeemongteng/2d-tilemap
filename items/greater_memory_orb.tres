@@ -4,8 +4,8 @@
 
 [resource]
 script = ExtResource("1_item")
-display_name = "Greater Memory Orb"
-description = "A brilliant sphere holding a lifetime of archmage research. Grants a large amount of Spell Points."
+display_name = "Greater Soul Orb"
+description = "A brilliant sphere holding a lifetime of soul essence. Grants +4 Souls for your Grimoire."
 glyph = "*"
 color = Color(1, 0.7, 0.2, 1)
 type = 4

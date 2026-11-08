@@ -19,6 +19,8 @@ extends Node2D
 @export var spawn_interval := 4
 @export var spawn_scene: PackedScene
 @export var is_boss := false
+## Optional boss-specific mechanic identifier handled by the game turn loop.
+@export var boss_gimmick := ""
 @export var footprint_radius := 0
 @export var slam_damage := 7
 ## Earliest room this monster can randomly appear in.
@@ -42,6 +44,7 @@ var relics: Array[ItemData] = []
 var spells: Array[SpellData] = []
 var statuses: Array[StatusData] = []
 var spell_points := 2
+var gold := 5
 var weapon: ItemData
 var armor: ItemData
 

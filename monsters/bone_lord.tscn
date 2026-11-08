@@ -13,7 +13,7 @@ defense = 1
 [node name="BoneLord" type="Node2D"]
 script = ExtResource("1_actor")
 display_name = "The Bone Lord"
-description = "Crowned necromancer-king of the deep crypts. Raises skeletons every 3 turns and telegraphs ground slams. Burn its minions and focus the king!"
+description = "Crowned necromancer-king of the deep crypts. Raises skeletons every 3 turns and projects a bone shield while any summoned skeleton guards remain alive."
 glyph = "L"
 color = Color(0.85, 0.8, 0.95, 1)
 font_size = 40
@@ -22,4 +22,5 @@ loot_chance = 1.0
 spawn_interval = 3
 spawn_scene = ExtResource("3_skeleton")
 is_boss = true
+boss_gimmick = "bone_guard"
 slam_damage = 6

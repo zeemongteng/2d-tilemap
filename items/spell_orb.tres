@@ -4,8 +4,8 @@
 
 [resource]
 script = ExtResource("1_item")
-display_name = "Memory Orb"
-description = "Crystallized arcane knowledge from an ancient wizard. Grants Spell Points for your Grimoire."
+display_name = "Soul Orb"
+description = "Crystallized soul essence from a fallen archmage. Grants +2 Souls for your Grimoire."
 glyph = "*"
 color = Color(0.95, 0.82, 0.25, 1)
 type = 4

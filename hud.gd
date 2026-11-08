@@ -126,7 +126,14 @@ func is_any_modal_open() -> bool:
 	return spellbook_modal.visible or confirm_modal.visible or debug_modal.visible
 
 
-func prompt_next_room(next_room_num: int, edge_cell: Vector2i, is_boss_room := false, boss_name := "", is_treasure_room := false) -> void:
+func prompt_next_room(
+	next_room_num: int,
+	edge_cell: Vector2i,
+	is_boss_room := false,
+	boss_name := "",
+	is_treasure_room := false,
+	is_shop_room := false
+) -> void:
 	_pending_edge_cell = edge_cell
 	hide_popup()
 	if is_treasure_room:
@@ -134,6 +141,12 @@ func prompt_next_room(next_room_num: int, edge_cell: Vector2i, is_boss_room := f
 		confirm_title.modulate = Color(1.0, 0.88, 0.28)
 		confirm_text.text = "A shimmering golden doorway beckons!\nEnter the adjacent Treasure Vault to claim a free Relic or Spell?"
 		yes_button.text = "[Y / Enter] Enter Treasure Room"
+	elif is_shop_room:
+		var cur_gold := _last_player.gold if _last_player != null else 0
+		confirm_title.text = "$ MERCHANT SHOP ROOM $"
+		confirm_title.modulate = Color(0.3, 0.95, 0.82)
+		confirm_text.text = "A lantern-lit merchant doorway beckons!\nEnter the adjacent Shop to spend your Coins (%02d¢) on Relics, Spells, and Gear?\n(1 random item is on 50%% Half-Off Sale!)" % cur_gold
+		yes_button.text = "[Y / Enter] Enter Merchant Shop"
 	elif is_boss_room:
 		confirm_title.text = "⚠ BOSS LAIR — ENTER ROOM %d? ⚠" % next_room_num
 		confirm_title.modulate = Color(1.0, 0.38, 0.38)
@@ -348,8 +361,8 @@ func refresh(
 	var devil_tag := "ψ OK" if room_turns <= par_turns else "missed"
 	var angel_tag := "† OK" if flawless else "hit"
 	var deal_line := "Par %d/%dt (%s)  |  No-Hit (%s)" % [room_turns, par_turns, devil_tag, angel_tag]
-	stats_label.text = "Room %d (%s)  |  Turn %d  |  SP: %d\n%s\nHP %d/%d   ATK %d   DEF %d\nWeapon: %s   Armor: %s%s" % [
-		room, room_status, turn, player.spell_points,
+	stats_label.text = "Room %d (%s)  |  Turn %d  |  Souls: %d  |  Coins: %02d¢\n%s\nHP %d/%d   ATK %d   DEF %d\nWeapon: %s   Armor: %s%s" % [
+		room, room_status, turn, player.spell_points, player.gold,
 		deal_line,
 		player.stats.hp, player.stats.max_hp,
 		player.total_attack(), player.total_defense(),
@@ -371,7 +384,7 @@ func refresh(
 
 	cleared_banner.visible = room_cleared
 
-	spellbook_button.text = "[B] Grimoire / Upgrade Spells (%d SP)" % player.spell_points
+	spellbook_button.text = "[B] Grimoire / Upgrade Spells (%d Souls)" % player.spell_points
 	_rebuild_spells(player, active_spell_idx)
 	_rebuild_relics(player)
 	_rebuild_inventory(player)
@@ -483,7 +496,7 @@ func _rebuild_inventory(player: Actor) -> void:
 
 func _rebuild_branch_choice(player: Actor) -> void:
 	var spell := _branch_choice_spell
-	spellbook_title.text = "CHOOSE A PATH — %s Lv.%d → Lv.%d  (%d SP, cost %d)" % [
+	spellbook_title.text = "CHOOSE A PATH — %s Lv.%d → Lv.%d  (%d Souls, cost %d)" % [
 		spell.display_name, spell.level, spell.level + 1, player.spell_points, spell.upgrade_cost
 	]
 	var offers := SpellBranches.offers_for(spell)
@@ -510,7 +523,7 @@ func _rebuild_branch_choice(player: Actor) -> void:
 		var pick_btn := Button.new()
 		pick_btn.focus_mode = Control.FOCUS_NONE
 		pick_btn.custom_minimum_size = Vector2(140, 38)
-		pick_btn.text = "Choose (%d SP)" % spell.upgrade_cost
+		pick_btn.text = "Choose (%d Souls)" % spell.upgrade_cost
 		pick_btn.disabled = not affordable
 		var branch_id := str(entry["id"])
 		pick_btn.pressed.connect(func() -> void:
@@ -525,7 +538,7 @@ func _rebuild_branch_choice(player: Actor) -> void:
 	if offers.is_empty():
 		var plain_btn := Button.new()
 		plain_btn.focus_mode = Control.FOCUS_NONE
-		plain_btn.text = "Level up (%d SP)" % spell.upgrade_cost
+		plain_btn.text = "Level up (%d Souls)" % spell.upgrade_cost
 		plain_btn.disabled = not affordable
 		plain_btn.pressed.connect(func() -> void:
 			_branch_choice_spell = null
@@ -544,7 +557,7 @@ func _rebuild_branch_choice(player: Actor) -> void:
 
 
 func _rebuild_spellbook(player: Actor) -> void:
-	spellbook_title.text = "RIFT GRIMOIRE — Spell Points (SP): %d" % player.spell_points
+	spellbook_title.text = "RIFT GRIMOIRE — Souls: %d" % player.spell_points
 	for child in catalog_list.get_children():
 		child.queue_free()
 	if _branch_choice_spell != null:
@@ -582,14 +595,14 @@ func _rebuild_spellbook(player: Actor) -> void:
 		action_btn.focus_mode = Control.FOCUS_NONE
 		action_btn.custom_minimum_size = Vector2(140, 38)
 		if learned == null:
-			action_btn.text = "Learn (%d SP)" % template.learn_cost
+			action_btn.text = "Learn (%d Souls)" % template.learn_cost
 			action_btn.disabled = player.spell_points < template.learn_cost
 			var tmpl := template
 			action_btn.pressed.connect(func() -> void:
 				spell_learn_requested.emit(tmpl)
 			)
 		elif learned.can_upgrade():
-			action_btn.text = "Upgrade (%d SP)" % learned.upgrade_cost
+			action_btn.text = "Upgrade (%d Souls)" % learned.upgrade_cost
 			action_btn.disabled = player.spell_points < learned.upgrade_cost
 			var sp := learned
 			action_btn.pressed.connect(func() -> void:
@@ -624,11 +637,16 @@ func _rebuild_debug_menu() -> void:
 
 	var quick_actions: Array[Dictionary] = [
 		{"id": "heal_full", "label": "Heal & Refill Spells", "color": Color(0.5, 1.0, 0.65)},
-		{"id": "add_sp", "label": "+5 Spell Points (SP)", "color": Color(0.95, 0.85, 0.4)},
+		{"id": "add_sp", "label": "+5 Souls", "color": Color(0.95, 0.85, 0.4)},
+		{"id": "add_gold", "label": "+25 Coins (¢)", "color": Color(1.0, 0.88, 0.25)},
 		{"id": "kill_all", "label": "Kill All Hostiles (Clear)", "color": Color(1.0, 0.55, 0.45)},
+		{"id": "spawn_shrine_chance", "label": "Spawn Shrine of Chance (¢)", "color": Color(0.45, 0.95, 0.9)},
+		{"id": "spawn_blood_altar", "label": "Spawn Altar of Blood (HP)", "color": Color(1.0, 0.35, 0.42)},
+		{"id": "spawn_shop_portal", "label": "Spawn Shop Portal ($)", "color": Color(0.35, 0.95, 0.8)},
 		{"id": "spawn_devil_portal", "label": "Spawn Devil Portal (ψ)", "color": Color(1.0, 0.35, 0.42)},
 		{"id": "spawn_angel_portal", "label": "Spawn Angel Portal (†)", "color": Color(1.0, 0.95, 0.55)},
 		{"id": "spawn_treasure_portal", "label": "Spawn Treasure Portal (⚜)", "color": Color(1.0, 0.85, 0.25)},
+		{"id": "enter_shop_room", "label": "Teleport → Shop Room", "color": Color(0.35, 0.95, 0.8)},
 		{"id": "enter_devil_room", "label": "Teleport → Devil Room", "color": Color(0.95, 0.3, 0.4)},
 		{"id": "enter_angel_room", "label": "Teleport → Angel Room", "color": Color(0.65, 0.9, 1.0)},
 		{"id": "enter_treasure_room", "label": "Teleport → Treasure Room", "color": Color(1.0, 0.85, 0.25)},

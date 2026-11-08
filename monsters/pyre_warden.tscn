@@ -14,7 +14,7 @@ defense = 1
 [node name="PyreWarden" type="Node2D" unique_id=1507446946]
 script = ExtResource("1_actor")
 display_name = "The Pyre Warden"
-description = "Infernal jailer wreathed in flame. Hurls burning bolts from 4 hexes away, summons fire imps, and telegraphs ground slams."
+description = "Infernal jailer wreathed in flame. Hurls burning bolts from 4 hexes away, periodically traces a Pyre Line to you, summons fire imps, and telegraphs ground slams."
 glyph = "W"
 color = Color(1, 0.5, 0.1, 1)
 font_size = 40
@@ -24,6 +24,7 @@ attack_range = 4
 spawn_interval = 5
 spawn_scene = ExtResource("3_imp")
 is_boss = true
+boss_gimmick = "pyre_line"
 slam_damage = 6
 on_hit_status = ExtResource("4_burn")
 on_hit_status_duration = 2

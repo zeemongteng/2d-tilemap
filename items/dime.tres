@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Dime"
+description = "A rare, radiant platinum coin worth 10 pennies (+10¢)!"
+glyph = "¢"
+color = Color(0.94, 1, 0.9, 1)
+type = 13
+gold_amount = 10
