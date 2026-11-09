@@ -5,6 +5,7 @@ signal spell_selected(index: int)
 signal item_selected(index: int)
 signal spell_learn_requested(template: SpellData)
 signal spell_upgrade_requested(spell: SpellData, branch_id: String)
+signal starting_spell_chosen(spell: SpellData)
 signal next_room_confirmed(edge_cell: Vector2i)
 signal debug_action_requested(action: String)
 signal debug_spawn_monster_requested(scene: PackedScene, as_ally: bool)
@@ -58,6 +59,7 @@ var _active_spell_index := -1
 var _ui_hover_active := false
 var _pending_edge_cell := Vector2i.ZERO
 var _branch_choice_spell: SpellData
+var _starter_choices: Array[SpellData] = []
 
 
 func _ready() -> void:
@@ -172,7 +174,10 @@ func close_confirm_modal() -> void:
 
 
 func toggle_spellbook() -> void:
+	if not _starter_choices.is_empty():
+		return
 	debug_modal.visible = false
+	close_button.visible = true
 	spellbook_modal.visible = not spellbook_modal.visible
 	_branch_choice_spell = null
 	hide_popup()
@@ -181,11 +186,29 @@ func toggle_spellbook() -> void:
 
 
 func close_spellbook() -> void:
+	if not _starter_choices.is_empty():
+		return
 	spellbook_modal.visible = false
 	_branch_choice_spell = null
 
 
+func prompt_starting_spell(choices: Array[SpellData]) -> void:
+	_starter_choices = choices.duplicate()
+	_branch_choice_spell = null
+	debug_modal.visible = false
+	confirm_modal.visible = false
+	close_button.visible = false
+	spellbook_modal.visible = true
+	hide_popup()
+	if _last_player != null:
+		_rebuild_spellbook(_last_player)
+	else:
+		_rebuild_starter_choice()
+
+
 func toggle_debug_menu() -> void:
+	if not _starter_choices.is_empty():
+		return
 	spellbook_modal.visible = false
 	debug_modal.visible = not debug_modal.visible
 	hide_popup()
@@ -335,7 +358,8 @@ func refresh(
 	active_boss: Actor = null,
 	room_turns := 0,
 	par_turns := 18,
-	flawless := true,
+	devil_chance := 100.0,
+	angel_chance := 100.0,
 	synergies := ""
 ) -> void:
 	_last_player = player
@@ -358,9 +382,10 @@ func refresh(
 		status_line += "\n✦ Synergies: " + synergies
 
 	var room_status := "★ CLEARED ★" if room_cleared else "Foes: %d" % remaining_foes
-	var devil_tag := "ψ OK" if room_turns <= par_turns else "missed"
-	var angel_tag := "† OK" if flawless else "hit"
-	var deal_line := "Par %d/%dt (%s)  |  No-Hit (%s)" % [room_turns, par_turns, devil_tag, angel_tag]
+	var overtime_tag := " (OVERTIME!)" if (not room_cleared and room_turns > par_turns) else ""
+	var deal_line := "Par %d/%dt%s  |  Boss Deals: ψ Devil %d%%  •  † Angel %d%%" % [
+		room_turns, par_turns, overtime_tag, int(round(devil_chance)), int(round(angel_chance))
+	]
 	stats_label.text = "Room %d (%s)  |  Turn %d  |  Souls: %d  |  Coins: %02d¢\n%s\nHP %d/%d   ATK %d   DEF %d\nWeapon: %s   Armor: %s%s" % [
 		room, room_status, turn, player.spell_points, player.gold,
 		deal_line,
@@ -494,13 +519,63 @@ func _rebuild_inventory(player: Actor) -> void:
 		inventory_list.add_child(btn)
 
 
+func _rebuild_starter_choice() -> void:
+	spellbook_title.text = "✦ CHOOSE YOUR STARTING SPELL (Pick 1 of 3) ✦"
+	close_button.visible = false
+	for child in catalog_list.get_children():
+		child.queue_free()
+
+	var subtitle := Label.new()
+	subtitle.text = "You begin your descent with only your innate Dash. Choose 1 starting spell to bind to your Grimoire:"
+	subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	subtitle.modulate = Color(0.85, 0.92, 0.88)
+	catalog_list.add_child(subtitle)
+
+	for template in _starter_choices:
+		var row := PanelContainer.new()
+		var hbox := HBoxContainer.new()
+		hbox.add_theme_constant_override("separation", 12)
+		row.add_child(hbox)
+
+		var info_box := VBoxContainer.new()
+		info_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		hbox.add_child(info_box)
+
+		var title := Label.new()
+		title.text = "✦ %s" % template.display_name
+		title.modulate = template.color.lerp(Color.WHITE, 0.35)
+		info_box.add_child(title)
+
+		var details := Label.new()
+		details.text = template.describe_details()
+		details.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		details.modulate = Color(0.88, 0.88, 0.88)
+		info_box.add_child(details)
+
+		var pick_btn := Button.new()
+		pick_btn.focus_mode = Control.FOCUS_NONE
+		pick_btn.custom_minimum_size = Vector2(160, 42)
+		pick_btn.text = "Choose Spell"
+		pick_btn.modulate = template.color.lerp(Color.WHITE, 0.45)
+		var tmpl := template
+		pick_btn.pressed.connect(func() -> void:
+			_starter_choices.clear()
+			close_button.visible = true
+			spellbook_modal.visible = false
+			starting_spell_chosen.emit(tmpl)
+		)
+		hbox.add_child(pick_btn)
+		catalog_list.add_child(row)
+
+
 func _rebuild_branch_choice(player: Actor) -> void:
 	var spell := _branch_choice_spell
+	var upg_cost := spell.effective_upgrade_cost()
 	spellbook_title.text = "CHOOSE A PATH — %s Lv.%d → Lv.%d  (%d Souls, cost %d)" % [
-		spell.display_name, spell.level, spell.level + 1, player.spell_points, spell.upgrade_cost
+		spell.display_name, spell.level, spell.level + 1, player.spell_points, upg_cost
 	]
 	var offers := SpellBranches.offers_for(spell)
-	var affordable := player.spell_points >= spell.upgrade_cost
+	var affordable := player.spell_points >= upg_cost
 	for entry in offers:
 		var row := PanelContainer.new()
 		var hbox := HBoxContainer.new()
@@ -523,7 +598,7 @@ func _rebuild_branch_choice(player: Actor) -> void:
 		var pick_btn := Button.new()
 		pick_btn.focus_mode = Control.FOCUS_NONE
 		pick_btn.custom_minimum_size = Vector2(140, 38)
-		pick_btn.text = "Choose (%d Souls)" % spell.upgrade_cost
+		pick_btn.text = "Choose (%d Souls)" % upg_cost
 		pick_btn.disabled = not affordable
 		var branch_id := str(entry["id"])
 		pick_btn.pressed.connect(func() -> void:
@@ -538,7 +613,7 @@ func _rebuild_branch_choice(player: Actor) -> void:
 	if offers.is_empty():
 		var plain_btn := Button.new()
 		plain_btn.focus_mode = Control.FOCUS_NONE
-		plain_btn.text = "Level up (%d Souls)" % spell.upgrade_cost
+		plain_btn.text = "Level up (%d Souls)" % upg_cost
 		plain_btn.disabled = not affordable
 		plain_btn.pressed.connect(func() -> void:
 			_branch_choice_spell = null
@@ -557,6 +632,10 @@ func _rebuild_branch_choice(player: Actor) -> void:
 
 
 func _rebuild_spellbook(player: Actor) -> void:
+	if not _starter_choices.is_empty():
+		_rebuild_starter_choice()
+		return
+	close_button.visible = true
 	spellbook_title.text = "RIFT GRIMOIRE — Souls: %d" % player.spell_points
 	for child in catalog_list.get_children():
 		child.queue_free()
@@ -602,8 +681,9 @@ func _rebuild_spellbook(player: Actor) -> void:
 				spell_learn_requested.emit(tmpl)
 			)
 		elif learned.can_upgrade():
-			action_btn.text = "Upgrade (%d Souls)" % learned.upgrade_cost
-			action_btn.disabled = player.spell_points < learned.upgrade_cost
+			var upg_cost := learned.effective_upgrade_cost()
+			action_btn.text = "Upgrade (%d Souls)" % upg_cost
+			action_btn.disabled = player.spell_points < upg_cost
 			var sp := learned
 			action_btn.pressed.connect(func() -> void:
 				_branch_choice_spell = sp

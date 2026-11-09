@@ -88,6 +88,9 @@
 [ext_resource type="PackedScene" path="res://monsters/tempest_archon.tscn" id="87_tempest_archon"]
 [ext_resource type="Resource" path="res://items/nickel.tres" id="88_nickel"]
 [ext_resource type="Resource" path="res://items/dime.tres" id="89_dime"]
+[ext_resource type="Resource" path="res://spells/poison_sting.tres" id="90_sting"]
+[ext_resource type="Resource" path="res://spells/static_spark.tres" id="91_spark"]
+[ext_resource type="Resource" path="res://spells/shadow_bolt.tres" id="92_shadow"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_game")
@@ -102,8 +105,8 @@ relic_pool = Array[Resource]([ExtResource("24_r_blood"), ExtResource("25_r_vajra
 devil_pool = Array[Resource]([ExtResource("35_the_mark"), ExtResource("36_vampiric_maw"), ExtResource("33_brimstone"), ExtResource("68_r_glass"), ExtResource("59_drain"), ExtResource("58_meteor")])
 angel_pool = Array[Resource]([ExtResource("37_sacred_heart"), ExtResource("38_holy_mantle"), ExtResource("34_divine_smite"), ExtResource("69_r_phoenix"), ExtResource("60_angel")])
 starting_items = Array[Resource]([ExtResource("12_mana"), ExtResource("11_potion")])
-starting_spells = Array[Resource]([ExtResource("14_fireball"), ExtResource("15_lightning"), ExtResource("16_icicle"), ExtResource("32_wolf_spell")])
-spell_catalog = Array[Resource]([ExtResource("14_fireball"), ExtResource("15_lightning"), ExtResource("16_icicle"), ExtResource("32_wolf_spell"), ExtResource("17_chain"), ExtResource("18_blink"), ExtResource("19_nova"), ExtResource("51_missile"), ExtResource("52_venom"), ExtResource("53_toxic"), ExtResource("54_hex"), ExtResource("55_raise"), ExtResource("56_blizzard"), ExtResource("57_golem"), ExtResource("80_siren"), ExtResource("81_dread")])
+starting_spells = Array[Resource]([ExtResource("14_fireball"), ExtResource("15_lightning"), ExtResource("16_icicle"), ExtResource("32_wolf_spell"), ExtResource("51_missile"), ExtResource("52_venom"), ExtResource("55_raise"), ExtResource("54_hex"), ExtResource("90_sting"), ExtResource("91_spark"), ExtResource("92_shadow")])
+spell_catalog = Array[Resource]([ExtResource("14_fireball"), ExtResource("15_lightning"), ExtResource("16_icicle"), ExtResource("32_wolf_spell"), ExtResource("17_chain"), ExtResource("18_blink"), ExtResource("19_nova"), ExtResource("51_missile"), ExtResource("52_venom"), ExtResource("53_toxic"), ExtResource("54_hex"), ExtResource("55_raise"), ExtResource("56_blizzard"), ExtResource("57_golem"), ExtResource("80_siren"), ExtResource("81_dread"), ExtResource("90_sting"), ExtResource("91_spark"), ExtResource("92_shadow")])
 
 [node name="HexGrid" type="Node2D" parent="."]
 script = ExtResource("2_grid")

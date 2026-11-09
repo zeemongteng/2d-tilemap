@@ -29,7 +29,7 @@ enum Pattern { SINGLE, BLAST, BEAM, CHAIN, BLINK, NOVA, SUMMON, DASH }
 
 @export_group("Progression")
 @export var learn_cost := 1
-@export var upgrade_cost := 2
+@export var upgrade_cost := 5
 @export var max_level := 3
 @export var bonus_damage_per_level := 2
 @export var bonus_charges_per_level := 2
@@ -137,6 +137,10 @@ func effective_radius() -> int:
 
 func can_upgrade() -> bool:
 	return level < max_level
+
+
+func effective_upgrade_cost() -> int:
+	return upgrade_cost + (level - 1) * 3
 
 
 ## Levels the spell up, taking `branch_id` (a random valid branch when empty). Returns the branch id taken, or "".

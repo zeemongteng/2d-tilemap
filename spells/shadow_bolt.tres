@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="SpellData" format=3]
+
+[ext_resource type="Script" path="res://spell_data.gd" id="1_spell"]
+
+[resource]
+script = ExtResource("1_spell")
+display_name = "Shadow Bolt"
+description = "A bolt of dark energy that siphons 1 HP from every foe it strikes."
+element = 5
+pattern = 0
+color = Color(0.55, 0.25, 0.75, 1)
+max_charges = 6
+cast_range = 5
+damage = 3
+heal_per_hit = 1
+learn_cost = 1
+upgrade_cost = 4
+bonus_damage_per_level = 2
+bonus_charges_per_level = 2
+bonus_range_per_level = 1

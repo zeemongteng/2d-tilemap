@@ -52,6 +52,7 @@ var spawn_cooldown := 3
 var ability_cooldown := 2
 var ability2_cooldown := 3
 var telegraph_mode := 0
+var telegraph_center := Vector2i.ZERO
 var telegraph_cells: Array[Vector2i] = []
 var is_enraged := false
 var was_charmed_enemy := false
