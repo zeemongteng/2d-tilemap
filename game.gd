@@ -1609,7 +1609,15 @@ func _cast_spell(spell: SpellData, target_cell: Vector2i) -> void:
 			player.evade_turns = 1
 			player.queue_redraw()
 
-	var vfx_tween := grid.play_spell_vfx(aoe_cells, spell.color, arc_points)
+	var vfx_tween: Tween
+	if spell.pattern == SpellData.Pattern.BLAST and spell.effective_damage() > 0:
+		vfx_tween = grid.play_explosion(target_cell, aoe_cells, spell.color)
+	elif spell.pattern == SpellData.Pattern.NOVA and spell.effective_damage() > 0:
+		vfx_tween = grid.play_explosion(player.cell, aoe_cells, spell.color)
+	elif spell.pattern == SpellData.Pattern.BLINK and spell.effective_radius() > 0 and spell.effective_damage() > 0:
+		vfx_tween = grid.play_explosion(target_cell, aoe_cells, spell.color)
+	else:
+		vfx_tween = grid.play_spell_vfx(aoe_cells, spell.color, arc_points)
 
 	if spell.pattern == SpellData.Pattern.SUMMON:
 		var ally := _spawn_summon(spell, target_cell)
@@ -1794,7 +1802,7 @@ func _foes_near(origin: Vector2i, near_radius: int, exclude: Actor = null) -> Ar
 
 ## Damages every hostile within `blast_radius` of `origin` (never allies or the player). Returns how many were hit.
 func _foe_blast(origin: Vector2i, blast_radius: int, blast_damage: int, blast_color: Color) -> int:
-	grid.play_spell_vfx(grid.cells_in_radius(origin, blast_radius, true), blast_color)
+	grid.play_explosion(origin, grid.cells_in_radius(origin, blast_radius, true), blast_color)
 	var victims := _foes_near(origin, blast_radius)
 	for f in victims:
 		f.take_damage(int(ceil(float(blast_damage) * f.incoming_damage_multiplier())), blast_color)
@@ -2065,7 +2073,7 @@ func _active_spell_clear_quiet() -> void:
 func _detonate_bomb(bomb: ItemData) -> void:
 	var blast_cells := grid.cells_in_radius(player.cell, bomb.blast_radius, true)
 	blast_cells.erase(player.cell)
-	grid.play_spell_vfx(blast_cells, bomb.color)
+	grid.play_explosion(player.cell, blast_cells, bomb.color)
 	var hit_names: Array[String] = []
 	var victims: Array[Actor] = []
 	for m in monsters.duplicate():
@@ -2307,7 +2315,7 @@ func _apply_damage_to_actor(defender: Actor, amount: int, color := Color(1, 0.3,
 				_devil_chance = maxf(0.0, _devil_chance - 8.0)
 				_angel_chance = maxf(0.0, _angel_chance - 18.0)
 		if defender.phoenix_charges < phoenix_before:
-			grid.play_spell_vfx(grid.cells_in_radius(defender.cell, 2, true), Color(1.0, 0.8, 0.2))
+			grid.play_explosion(defender.cell, grid.cells_in_radius(defender.cell, 2, true), Color(1.0, 0.8, 0.2))
 			hud.post("🔥 The Phoenix Feather burns away — you rise again with %d HP!" % defender.stats.hp)
 			if _has_synergy("Glass Phoenix"):
 				var rebirth_hits := _foe_blast(defender.cell, 3, 20, Color(1.0, 0.7, 0.9))
@@ -2492,7 +2500,7 @@ func _trigger_kill_relics(death_cell: Vector2i) -> void:
 			m.apply_status(BURN_STATUS, gas_duration + player.total_status_duration_bonus(), player.total_burn_damage_bonus())
 			ignited += 1
 		if ignited > 0:
-			grid.play_spell_vfx(grid.cells_in_radius(death_cell, gas_radius, true), Color(1.0, 0.55, 0.15))
+			grid.play_explosion(death_cell, grid.cells_in_radius(death_cell, gas_radius, true), Color(1.0, 0.55, 0.15))
 			hud.post("Gasoline ignites! %d nearby foe(s) catch fire." % ignited)
 
 	var bandolier_stacks := player.count_relic(ItemData.RelicEffect.BANDOLIER)
@@ -2532,7 +2540,7 @@ func _split_on_death(scene: PackedScene, count: int, origin: Vector2i) -> void:
 
 func _death_explosion(origin: Vector2i, blast_radius: int, blast_damage: int, blast_color: Color) -> void:
 	var blast_cells := grid.cells_in_radius(origin, blast_radius, true)
-	grid.play_spell_vfx(blast_cells, blast_color)
+	grid.play_explosion(origin, blast_cells, blast_color)
 	var victims: Array[Actor] = []
 	for m in monsters:
 		if m.is_dead() or m.distance_to_cell(origin) > blast_radius:
@@ -2764,7 +2772,10 @@ func _boss_act(boss: Actor) -> Tween:
 			7:
 				vfx_col = Color(1.0, 0.94, 0.3)
 				atk_name = "Skybreaker Cross"
-		grid.play_spell_vfx(slam_cells, vfx_col, slam_arc)
+		if not slam_arc.is_empty():
+			grid.play_spell_vfx([], vfx_col, slam_arc)
+		var blast_center := slam_center if mode == 1 else _aoe_center(slam_cells)
+		grid.play_explosion(blast_center, slam_cells, vfx_col)
 		var hit_any := false
 		if slam_cells.has(player.cell):
 			hit_any = true
@@ -3020,6 +3031,24 @@ func _nearest_open_cell_outside_boss(boss: Actor, from_cell: Vector2i) -> Vector
 	return best
 
 
+## Hex in `cells` closest to their pixel centroid — the epicenter for irregular boss AoE shapes.
+func _aoe_center(cells: Array[Vector2i]) -> Vector2i:
+	if cells.is_empty():
+		return Vector2i.ZERO
+	var sum := Vector2.ZERO
+	for c in cells:
+		sum += grid.cell_to_pixel(c)
+	var centroid := sum / float(cells.size())
+	var best := cells[0]
+	var best_d := INF
+	for c in cells:
+		var d := grid.cell_to_pixel(c).distance_squared_to(centroid)
+		if d < best_d:
+			best_d = d
+			best = c
+	return best
+
+
 func _spawner_act(spawner: Actor) -> void:
 	spawner.spawn_cooldown -= 1
 	if spawner.spawn_cooldown > 0:
@@ -3166,7 +3195,12 @@ func _execute_actor_spell(caster: Actor, spell: SpellData, target_cell: Vector2i
 			aoe_cells = [target_cell]
 			arc_points = [grid.cell_to_pixel(caster.cell), grid.cell_to_pixel(target_cell)]
 
-	grid.play_spell_vfx(aoe_cells, spell.color, arc_points)
+	if spell.pattern == SpellData.Pattern.BLAST and spell.effective_damage() > 0:
+		grid.play_explosion(target_cell, aoe_cells, spell.color)
+	elif spell.pattern == SpellData.Pattern.NOVA and spell.effective_damage() > 0:
+		grid.play_explosion(caster.cell, aoe_cells, spell.color)
+	else:
+		grid.play_spell_vfx(aoe_cells, spell.color, arc_points)
 
 	var raw_dmg := spell.effective_damage()
 	if caster.is_allies and raw_dmg > 0:

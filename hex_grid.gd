@@ -58,6 +58,7 @@ var vfx_cells: Array[Vector2i] = []
 var vfx_arc_points: Array[Vector2] = []
 var vfx_color := Color.WHITE
 var vfx_alpha := 0.0
+var _explosion_layer: ExplosionLayer
 
 
 static func distance(a: Vector2i, b: Vector2i) -> int:
@@ -85,6 +86,24 @@ func _ready() -> void:
 	for i in 6:
 		var angle := deg_to_rad(60.0 * i - 30.0)
 		_corners.append(Vector2(cos(angle), sin(angle)) * hex_size)
+	_explosion_layer = ExplosionLayer.new()
+	_explosion_layer.name = "ExplosionLayer"
+	add_child(_explosion_layer)
+	_explosion_layer.setup(hex_size, PackedVector2Array(_corners))
+
+
+## Rift Wizard-style rippling explosion: every hex in `cells` bursts in turn, ring by ring
+## outward from `center`. Returns a tween that finishes when the last burst fades.
+func play_explosion(center: Vector2i, cells: Array[Vector2i], color: Color) -> Tween:
+	var positions: Array[Vector2] = []
+	var rings: Array[int] = []
+	for c in cells:
+		positions.append(cell_to_pixel(c))
+		rings.append(distance(c, center))
+	var duration := _explosion_layer.explode(positions, rings, color)
+	var tween := create_tween()
+	tween.tween_interval(duration)
+	return tween
 
 
 func cell_to_pixel(cell: Vector2i) -> Vector2:
