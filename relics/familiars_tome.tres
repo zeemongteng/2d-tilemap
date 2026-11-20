@@ -9,4 +9,5 @@ description = "A grimoire of cantrips for your servants. Every minion learns a r
 glyph = "?"
 color = Color(0.7, 0.55, 1, 1)
 type = 5
+tier = 2
 relic_effect = 21

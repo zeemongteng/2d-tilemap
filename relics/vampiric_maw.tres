@@ -9,6 +9,7 @@ description = "Insatiable abyssal fangs. Heals 3 HP on every enemy kill and incr
 glyph = "?"
 color = Color(0.88, 0.18, 0.38, 1)
 type = 5
+tier = 3
 burn_damage_bonus = 2
 hp_cost = 4
 relic_effect = 9

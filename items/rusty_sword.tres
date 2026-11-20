@@ -9,4 +9,5 @@ description = "A notched iron blade left behind by a fallen delve-knight. Still 
 glyph = "/"
 color = Color(0.78, 0.78, 0.82, 1)
 type = 0
+tier = 0
 attack_bonus = 2

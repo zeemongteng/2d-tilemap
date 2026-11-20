@@ -9,4 +9,5 @@ description = "A brilliant sphere holding a lifetime of soul essence. Grants +4 
 glyph = "*"
 color = Color(1, 0.7, 0.2, 1)
 type = 4
+tier = 3
 sp_amount = 4

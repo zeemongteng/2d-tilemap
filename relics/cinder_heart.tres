@@ -9,6 +9,7 @@ description = "An ember of the primordial furnace. Increases Burn damage by +3 p
 glyph = "?"
 color = Color(1, 0.48, 0.12, 1)
 type = 5
+tier = 2
 burn_damage_bonus = 3
 status_duration_bonus = 1
 relic_effect = 6

@@ -9,6 +9,7 @@ description = "Dark sigil of the abyss. Permanently grants +3 ATK, +3 Spell Dama
 glyph = "?"
 color = Color(0.95, 0.2, 0.25, 1)
 type = 5
+tier = 4
 attack_bonus = 3
 spell_damage_bonus = 3
 spell_range_bonus = 1

@@ -9,3 +9,4 @@ description = "An unlabeled capsule. Could be a blessing, could be a curse. Swal
 glyph = "p"
 color = Color(0.9, 0.9, 0.95, 1)
 type = 11
+tier = 0

@@ -9,5 +9,6 @@ description = "Heads you win. Foes are 50% more likely to drop loot and Coins, N
 glyph = "?"
 color = Color(0.95, 0.85, 0.4, 1)
 type = 5
+tier = 0
 relic_effect = 19
 

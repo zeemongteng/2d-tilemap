@@ -9,5 +9,6 @@ description = "Star-stitched silk that thrums with latent magic. Light protectio
 glyph = "]"
 color = Color(0.55, 0.5, 0.95, 1)
 type = 1
+tier = 2
 defense_bonus = 1
 spell_damage_bonus = 2

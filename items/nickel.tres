@@ -9,4 +9,5 @@ description = "A heavy silver-gleaming coin worth 5 pennies (+5¢)!"
 glyph = "¢"
 color = Color(0.76, 0.88, 0.98, 1)
 type = 13
+tier = 1
 gold_amount = 5

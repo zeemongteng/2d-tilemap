@@ -9,4 +9,5 @@ description = "A shiny copper-gold coin (+1¢). Spend coins at Merchant Shops or
 glyph = "¢"
 color = Color(1, 0.86, 0.22, 1)
 type = 13
+tier = 0
 gold_amount = 1

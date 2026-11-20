@@ -95,6 +95,15 @@ func _draw() -> void:
 		draw_circle(Vector2.ZERO, 9.5, Color(0.0, 0.0, 0.0, 0.38))
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
+	# High-tier ground aura for Epic (T3) and Mythic (T4) drops.
+	if data.has_tier() and data.tier >= 3:
+		var tcol := data.tier_color()
+		var aura_pulse := 0.22 + 0.12 * sin(_anim_time * (5.0 if data.tier >= 4 else 3.2) + _bob_phase)
+		var aura_r := 14.5 if data.tier >= 4 else 12.0
+		draw_circle(center, aura_r, Color(tcol.r, tcol.g, tcol.b, aura_pulse))
+		if data.tier >= 4:
+			draw_arc(center, aura_r + 1.5, 0.0, TAU, 20, Color(tcol.r, tcol.g, tcol.b, 0.72), 1.4)
+
 	_draw_item_icon(center, font)
 
 

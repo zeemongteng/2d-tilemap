@@ -9,4 +9,5 @@ description = "Cured cavern-beast hide stitched into a light jerkin. Turns aside
 glyph = "["
 color = Color(0.7, 0.5, 0.3, 1)
 type = 1
+tier = 0
 defense_bonus = 1

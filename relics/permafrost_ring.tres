@@ -9,6 +9,7 @@ description = "Biting rime-silver band. Extends all status durations by +1 turn 
 glyph = "?"
 color = Color(0.42, 0.92, 1, 1)
 type = 5
+tier = 2
 status_duration_bonus = 1
 afflicted_damage_bonus = 3
 relic_effect = 7

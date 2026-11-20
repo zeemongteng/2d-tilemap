@@ -9,5 +9,6 @@ description = "A tiny, deafening instrument. Your melee hits have a 30% chance t
 glyph = "?"
 color = Color(1, 0.92, 0.35, 1)
 type = 5
+tier = 3
 relic_effect = 18
 

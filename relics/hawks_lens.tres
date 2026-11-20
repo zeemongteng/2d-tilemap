@@ -9,6 +9,7 @@ description = "A scrying monocle ground from a raptor's eye. Permanently grants 
 glyph = "?"
 color = Color(0.6, 0.85, 0.5, 1)
 type = 5
+tier = 1
 spell_damage_bonus = 1
 spell_range_bonus = 2
 relic_effect = 20

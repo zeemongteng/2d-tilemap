@@ -9,4 +9,5 @@ description = "Heavy double-bitted battleaxe that cleaves through cave hides and
 glyph = "P"
 color = Color(0.55, 0.7, 0.9, 1)
 type = 0
+tier = 1
 attack_bonus = 4

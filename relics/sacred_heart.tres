@@ -9,6 +9,7 @@ description = "Beatific heart of pure light. Permanently grants +6 Max HP (fully
 glyph = "?"
 color = Color(1, 0.95, 0.6, 1)
 type = 5
+tier = 4
 attack_bonus = 2
 max_hp_bonus = 6
 spell_damage_bonus = 4

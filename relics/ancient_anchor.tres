@@ -9,6 +9,7 @@ description = "Miniature iron anchor humming with protective wards. Permanently 
 glyph = "?"
 color = Color(0.4, 0.88, 0.78, 1)
 type = 5
+tier = 1
 defense_bonus = 2
 max_hp_bonus = 8
 relic_effect = 3

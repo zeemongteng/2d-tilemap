@@ -657,15 +657,15 @@ func _build_shop_offers() -> Array[ItemData]:
 				gear_or_orbs.append(it)
 
 	if not consumables.is_empty():
-		var c_offer := consumables[_rng.randi_range(0, consumables.size() - 1)].duplicate() as ItemData
-		c_offer.gold_cost = 5
+		var c_offer := _pick_weighted_item(consumables, 0.25).duplicate() as ItemData
+		c_offer.gold_cost = 3 + c_offer.tier * 2
 		c_offer.hp_cost = 0
 		c_offer.is_on_sale = false
 		offers.append(c_offer)
 
 	if not gear_or_orbs.is_empty():
-		var g_offer := gear_or_orbs[_rng.randi_range(0, gear_or_orbs.size() - 1)].duplicate() as ItemData
-		g_offer.gold_cost = 5
+		var g_offer := _pick_weighted_item(gear_or_orbs, 0.25).duplicate() as ItemData
+		g_offer.gold_cost = 3 + g_offer.tier * 2
 		g_offer.hp_cost = 0
 		g_offer.is_on_sale = false
 		offers.append(g_offer)
@@ -689,16 +689,17 @@ func _build_shop_offers() -> Array[ItemData]:
 		ped.description = sp_pick.describe_details()
 		ped.glyph = "★"
 		ped.color = sp_pick.color
+		ped.tier = clampi(sp_pick.learn_cost, 1, 4)
 		ped.granted_spell = sp_pick
-		ped.gold_cost = 15
+		ped.gold_cost = 12 + ped.tier * 2
 		ped.hp_cost = 0
 		ped.is_on_sale = false
 		offers.append(ped)
 
-	var rel_template := _random_relic()
+	var rel_template := _random_relic(0.25)
 	if rel_template != null:
 		var rel_offer := rel_template.duplicate() as ItemData
-		rel_offer.gold_cost = 15
+		rel_offer.gold_cost = 10 + rel_offer.tier * 3
 		rel_offer.hp_cost = 0
 		rel_offer.is_on_sale = false
 		offers.append(rel_offer)
@@ -792,7 +793,7 @@ func _grant_altar_reward(origin_cell: Vector2i, altar_name: String, high_relic_o
 	var relic_chance := 0.50 if high_relic_odds else 0.35
 	relic_chance += 0.10 * float(player.count_relic(ItemData.RelicEffect.LUCKY_PENNY))
 	if _rng.randf() < relic_chance:
-		var rel := _random_relic()
+		var rel := _random_relic(0.45 if high_relic_odds else 0.15)
 		if rel != null:
 			var rel_copy := rel.duplicate() as ItemData
 			rel_copy.hp_cost = 0
@@ -953,24 +954,66 @@ func _spawn_item(data: ItemData, cell: Vector2i, pedestal := false, angel_pedest
 	items.append(item)
 
 
-func _random_item() -> ItemData:
+func _tier_weight(tier: int, high_tier_bias := 0.0) -> float:
+	var base := 1.0
+	match clampi(tier, 0, 4):
+		0:
+			base = 1.0
+		1:
+			base = 0.85
+		2:
+			base = 0.55
+		3:
+			base = 0.30
+		_:
+			base = 0.12
+	var luck := float(player.count_relic(ItemData.RelicEffect.LUCKY_PENNY)) if player != null else 0.0
+	var depth_bonus := maxf(0.0, float(room_level - 1)) * 0.05
+	var boost := maxf(0.0, high_tier_bias + depth_bonus + luck * 0.12)
+	if tier >= 2:
+		return base * (1.0 + boost * float(tier - 1))
+	return base
+
+
+func _pick_weighted_item(pool: Array[ItemData], high_tier_bias := 0.0) -> ItemData:
+	if pool.is_empty():
+		return null
+	var total_weight := 0.0
+	for it in pool:
+		total_weight += _tier_weight(it.tier, high_tier_bias)
+	var roll := _rng.randf() * total_weight
+	var acc := 0.0
+	for it in pool:
+		acc += _tier_weight(it.tier, high_tier_bias)
+		if roll <= acc:
+			return it
+	return pool[pool.size() - 1]
+
+
+func _random_item(high_tier_bias := 0.0) -> ItemData:
 	if item_pool.is_empty():
 		return null
-	return item_pool[_rng.randi_range(0, item_pool.size() - 1)] as ItemData
+	var typed: Array[ItemData] = []
+	for res in item_pool:
+		if res is ItemData:
+			typed.append(res as ItemData)
+	return _pick_weighted_item(typed, high_tier_bias)
 
 
-func _random_relic() -> ItemData:
+func _random_relic(high_tier_bias := 0.0) -> ItemData:
 	if relic_pool.is_empty():
 		return null
 	var unowned: Array[ItemData] = []
+	var all_relics: Array[ItemData] = []
 	for res in relic_pool:
 		if res is ItemData:
 			var r := res as ItemData
+			all_relics.append(r)
 			if not player.has_relic(r.relic_effect):
 				unowned.append(r)
 	if not unowned.is_empty():
-		return unowned[_rng.randi_range(0, unowned.size() - 1)]
-	return relic_pool[_rng.randi_range(0, relic_pool.size() - 1)] as ItemData
+		return _pick_weighted_item(unowned, high_tier_bias)
+	return _pick_weighted_item(all_relics, high_tier_bias)
 
 
 func _refresh_hud() -> void:
@@ -2459,7 +2502,7 @@ func _handle_monster_death(defender: Actor) -> void:
 	if defender.is_boss:
 		hud.post("★ BOSS VANQUISHED: %s falls!%s Dropped a Relic, Mana Potion, and Coins!" % [defender.display_name, note_str])
 		if _item_at(defender.cell) == null:
-			_spawn_item(_random_relic(), defender.cell)
+			_spawn_item(_random_relic(0.7), defender.cell)
 		for n in grid.walkable_neighbors(defender.cell):
 			if _item_at(n) == null:
 				for it_res in starting_items:

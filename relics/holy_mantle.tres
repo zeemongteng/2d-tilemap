@@ -9,6 +9,7 @@ description = "Divine aegis that wards your soul. Blocks the first instance of d
 glyph = "?"
 color = Color(0.55, 0.9, 1, 1)
 type = 5
+tier = 4
 defense_bonus = 1
 relic_effect = 11
 

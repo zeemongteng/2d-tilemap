@@ -8,5 +8,6 @@ display_name = "Elixir of Fortitude"
 description = "Bitter golden syrup. Heals a little and permanently toughens your constitution."
 glyph = "!"
 color = Color(0.95, 0.8, 0.3, 1)
+tier = 3
 heal_amount = 6
 max_hp_bonus = 3

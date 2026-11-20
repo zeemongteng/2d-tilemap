@@ -9,5 +9,6 @@ description = "A cracked urn that drinks the dying breath of your victims. Every
 glyph = "?"
 color = Color(0.7, 0.85, 1, 1)
 type = 5
+tier = 1
 relic_effect = 17
 

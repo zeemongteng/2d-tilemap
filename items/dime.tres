@@ -9,4 +9,5 @@ description = "A rare, radiant platinum coin worth 10 pennies (+10¢)!"
 glyph = "¢"
 color = Color(0.94, 1, 0.9, 1)
 type = 13
+tier = 2
 gold_amount = 10

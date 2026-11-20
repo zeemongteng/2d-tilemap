@@ -9,4 +9,5 @@ description = "Dwarf-forged full plate. Heavy, scratched, and nearly impervious 
 glyph = "H"
 color = Color(0.7, 0.75, 0.85, 1)
 type = 1
+tier = 3
 defense_bonus = 4

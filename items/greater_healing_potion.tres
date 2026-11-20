@@ -8,4 +8,5 @@ display_name = "Greater Healing Potion"
 description = "A thick, shimmering tonic distilled from troll blood. Closes grievous wounds."
 glyph = "!"
 color = Color(1, 0.35, 0.4, 1)
+tier = 2
 heal_amount = 20

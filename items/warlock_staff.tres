@@ -9,5 +9,6 @@ description = "Gnarled yew topped with a pulsing violet gem. A poor club, but it
 glyph = "|"
 color = Color(0.7, 0.45, 1, 1)
 type = 0
+tier = 3
 attack_bonus = 1
 spell_damage_bonus = 3

@@ -10,6 +10,7 @@ description = "A greatsword whose edge glows like a forge. Strikes set the targe
 glyph = "/"
 color = Color(1, 0.5, 0.15, 1)
 type = 0
+tier = 3
 attack_bonus = 5
 on_hit_status = ExtResource("2_burn")
 on_hit_status_duration = 2

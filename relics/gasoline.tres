@@ -9,5 +9,6 @@ description = "Reeking of fumes. Whenever a foe dies, the fire spreads: all foes
 glyph = "?"
 color = Color(1, 0.6, 0.15, 1)
 type = 5
+tier = 2
 relic_effect = 14
 

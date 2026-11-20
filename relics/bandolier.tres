@@ -9,5 +9,6 @@ description = "Leather belt of scavenged reagent vials. Every foe that dies has 
 glyph = "?"
 color = Color(0.75, 0.6, 0.35, 1)
 type = 5
+tier = 2
 relic_effect = 16
 

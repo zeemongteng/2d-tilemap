@@ -9,6 +9,7 @@ description = "A brittle crystal that hums with unstable power. Permanently gran
 glyph = "?"
 color = Color(1, 0.25, 0.55, 1)
 type = 5
+tier = 3
 attack_bonus = 2
 spell_damage_bonus = 6
 hp_cost = 8

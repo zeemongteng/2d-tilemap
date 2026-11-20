@@ -9,5 +9,6 @@ description = "Your blood burns with undying vigor. Heals 2 HP on every monster 
 glyph = "?"
 color = Color(1, 0.35, 0.22, 1)
 type = 5
+tier = 2
 relic_effect = 1
 

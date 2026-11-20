@@ -9,6 +9,7 @@ description = "A faceted thunderbolt stone of pure power. Permanently grants +2 
 glyph = "?"
 color = Color(1, 0.78, 0.2, 1)
 type = 5
+tier = 3
 attack_bonus = 2
 spell_damage_bonus = 2
 relic_effect = 2

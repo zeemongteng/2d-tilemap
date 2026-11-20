@@ -9,5 +9,6 @@ description = "Crackling tempest in a glass sphere. Entering a new room zaps a r
 glyph = "?"
 color = Color(0.35, 0.85, 1, 1)
 type = 5
+tier = 3
 relic_effect = 4
 

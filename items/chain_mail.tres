@@ -9,4 +9,5 @@ description = "Interlocking steel rings forged for front-line rift wardens. Heav
 glyph = "["
 color = Color(0.7, 0.8, 0.85, 1)
 type = 1
+tier = 1
 defense_bonus = 2

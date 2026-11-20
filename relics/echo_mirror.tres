@@ -9,4 +9,5 @@ description = "A cracked mirror that remembers your magic. Whenever you cast a s
 glyph = "?"
 color = Color(0.6, 0.95, 0.95, 1)
 type = 5
+tier = 3
 relic_effect = 22

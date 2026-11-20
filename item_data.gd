@@ -52,6 +52,8 @@ enum RelicEffect {
 @export var glyph := "?"
 @export var color := Color.WHITE
 @export var type := Type.POTION
+## Quality tier from 0 (Basic) to 4 (Mythic / Strongest).
+@export_range(0, 4) var tier := 1
 @export var attack_bonus := 0
 @export var defense_bonus := 0
 @export var max_hp_bonus := 0
@@ -126,42 +128,87 @@ func _cost_suffix() -> String:
 	return ""
 
 
+func has_tier() -> bool:
+	return type not in [
+		Type.DEVIL_PORTAL,
+		Type.ANGEL_PORTAL,
+		Type.TREASURE_PORTAL,
+		Type.SHOP_PORTAL,
+		Type.RETURN_PORTAL,
+		Type.SHRINE_OF_CHANCE,
+		Type.BLOOD_ALTAR,
+	]
+
+
+func tier_name() -> String:
+	match clampi(tier, 0, 4):
+		0:
+			return "Tier 0 • Basic"
+		1:
+			return "Tier 1 • Common"
+		2:
+			return "Tier 2 • Rare"
+		3:
+			return "Tier 3 • Epic"
+		_:
+			return "Tier 4 • Mythic"
+
+
+func tier_color() -> Color:
+	match clampi(tier, 0, 4):
+		0:
+			return Color(0.68, 0.68, 0.72)
+		1:
+			return Color(0.88, 0.92, 0.96)
+		2:
+			return Color(0.38, 0.78, 1.0)
+		3:
+			return Color(0.82, 0.45, 1.0)
+		_:
+			return Color(1.0, 0.82, 0.25)
+
+
+func _tier_prefix() -> String:
+	return "[%s]  " % tier_name() if has_tier() else ""
+
+
 func type_name() -> String:
+	var tp := _tier_prefix()
 	match type:
 		Type.WEAPON:
-			return "Weapon  •  +%d ATK%s%s" % [attack_bonus, gear_extras(), _cost_suffix()]
+			return "%sWeapon  •  +%d ATK%s%s" % [tp, attack_bonus, gear_extras(), _cost_suffix()]
 		Type.ARMOR:
-			return "Armor  •  +%d DEF%s%s" % [defense_bonus, gear_extras(), _cost_suffix()]
+			return "%sArmor  •  +%d DEF%s%s" % [tp, defense_bonus, gear_extras(), _cost_suffix()]
 		Type.BOMB:
-			return "Consumable  •  %d DMG to all foes within %d hex%s" % [blast_damage, blast_radius, _cost_suffix()]
+			return "%sConsumable  •  %d DMG to all foes within %d hex%s" % [tp, blast_damage, blast_radius, _cost_suffix()]
 		Type.PILL:
-			return "Consumable  •  Unknown effect — gamble!%s" % _cost_suffix()
+			return "%sConsumable  •  Unknown effect — gamble!%s" % [tp, _cost_suffix()]
 		Type.MANA_POTION:
-			return "Consumable  •  +%d Spell Charges%s" % [charge_restore, _cost_suffix()]
+			return "%sConsumable  •  +%d Spell Charges%s" % [tp, charge_restore, _cost_suffix()]
 		Type.POTION when max_hp_bonus > 0:
-			return "Consumable  •  Restores %d HP, +%d Max HP%s" % [heal_amount, max_hp_bonus, _cost_suffix()]
+			return "%sConsumable  •  Restores %d HP, +%d Max HP%s" % [tp, heal_amount, max_hp_bonus, _cost_suffix()]
 		Type.SPELL_ORB:
-			return "Artifact  •  +%d Souls%s" % [sp_amount, _cost_suffix()]
+			return "%sArtifact  •  +%d Souls%s" % [tp, sp_amount, _cost_suffix()]
 		Type.GOLD:
-			return "Coin Pickup  •  +%d¢" % gold_amount
+			return "%sCoin Pickup  •  +%d¢" % [tp, gold_amount]
 		Type.RELIC:
 			if gold_cost > 0:
 				var rel_sale := " (50% OFF SALE!)" if is_on_sale else ""
-				return "Shop Relic  •  Price: %d¢%s" % [gold_cost, rel_sale]
+				return "%sShop Relic  •  Price: %d¢%s" % [tp, gold_cost, rel_sale]
 			if hp_cost > 0:
-				return "Devil Deal Relic  •  Costs %d Max HP" % hp_cost
-			return "Rare Relic  •  Permanent Passive"
+				return "%sDevil Deal Relic  •  Costs %d Max HP" % [tp, hp_cost]
+			return "%sRelic  •  Permanent Passive" % tp
 		Type.SPELL_PEDESTAL:
 			if gold_cost > 0:
 				var sp_sale := " (50% OFF SALE!)" if is_on_sale else ""
-				return "Shop Spell Tome  •  Price: %d¢%s" % [gold_cost, sp_sale]
+				return "%sShop Spell Tome  •  Price: %d¢%s" % [tp, gold_cost, sp_sale]
 			if hp_cost > 0:
-				return "Devil Deal Spell  •  Costs %d Max HP" % hp_cost
-			return "Angel Blessing Spell  •  Free"
+				return "%sDevil Deal Spell  •  Costs %d Max HP" % [tp, hp_cost]
+			return "%sAngel Blessing Spell  •  Free" % tp
 		Type.DEVIL_PORTAL:
-			return "Devil Room Portal (Earned via Speed-Clear!)"
+			return "Devil Room Portal (Boss Deal)"
 		Type.ANGEL_PORTAL:
-			return "Angel Room Portal (Earned via Flawless Clear!)"
+			return "Angel Room Portal (Boss Deal)"
 		Type.TREASURE_PORTAL:
 			return "Golden Treasure Room Portal"
 		Type.SHOP_PORTAL:
@@ -173,7 +220,7 @@ func type_name() -> String:
 		Type.BLOOD_ALTAR:
 			return "Blood Altar  •  Sacrifice %d HP → Coins & Reward (%d left)" % [hp_cost, uses_left]
 		_:
-			return "Consumable  •  Restores %d HP%s" % [heal_amount, _cost_suffix()]
+			return "%sConsumable  •  Restores %d HP%s" % [tp, heal_amount, _cost_suffix()]
 
 
 func describe_details() -> String:

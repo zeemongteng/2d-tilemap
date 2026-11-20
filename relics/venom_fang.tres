@@ -10,6 +10,7 @@ description = "A snake's fang still weeping toxin. Grants +1 ATK, and your melee
 glyph = "?"
 color = Color(0.55, 0.9, 0.25, 1)
 type = 5
+tier = 1
 attack_bonus = 1
 on_hit_status = ExtResource("2_poison")
 on_hit_status_duration = 3

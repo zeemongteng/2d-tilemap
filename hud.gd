@@ -227,6 +227,7 @@ func show_item_popup(item: ItemData, from_ui := true) -> void:
 	popup_title.text = "%s %s" % [item.glyph, item.display_name]
 	popup_title.modulate = item.color.lerp(Color.WHITE, 0.35)
 	popup_subtitle.text = item.type_name()
+	popup_subtitle.modulate = item.tier_color() if item.has_tier() else Color(0.85, 0.85, 0.85)
 	popup_body.text = item.description if not item.description.is_empty() else "Click to use."
 	info_popup.reset_size()
 	info_popup.visible = true
@@ -262,6 +263,7 @@ func show_spell_popup(spell: SpellData, from_ui := true) -> void:
 		dmg_part, range_part,
 		resource_part
 	]
+	popup_subtitle.modulate = Color(0.85, 0.85, 0.85)
 	popup_body.text = spell.description
 	if not spell.branches.is_empty():
 		popup_body.text += "\nBranches: %s" % spell.branch_summary()
@@ -287,6 +289,7 @@ func show_actor_popup(actor: Actor) -> void:
 		boss_tag = " [ALLY]"
 	popup_title.text = "%s %s%s" % [actor.glyph, actor.display_name.capitalize(), boss_tag]
 	popup_title.modulate = actor.color.lerp(Color.WHITE, 0.35)
+	popup_subtitle.modulate = Color(0.85, 0.85, 0.85)
 	if actor.is_spawner:
 		popup_subtitle.text = "HP %d/%d  •  DEF %d  •  Spawns in %d turn(s)" % [
 			actor.stats.hp, actor.stats.max_hp, actor.total_defense(), actor.spawn_cooldown
@@ -479,8 +482,8 @@ func _rebuild_relics(player: Actor) -> void:
 	for relic in player.relics:
 		var badge := Button.new()
 		badge.focus_mode = Control.FOCUS_NONE
-		badge.text = "? %s" % relic.display_name
-		badge.modulate = relic.color.lerp(Color.WHITE, 0.4)
+		badge.text = "? %s [T%d]" % [relic.display_name, relic.tier]
+		badge.modulate = relic.tier_color() if relic.tier >= 3 else relic.color.lerp(Color.WHITE, 0.4)
 		var rel := relic
 		badge.mouse_entered.connect(func() -> void:
 			show_item_popup(rel, true)
@@ -789,8 +792,8 @@ func _rebuild_debug_menu() -> void:
 		var name_lbl := Label.new()
 		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		name_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
-		name_lbl.text = "? %s" % rel.display_name
-		name_lbl.modulate = rel.color.lerp(Color.WHITE, 0.35)
+		name_lbl.text = "? [T%d] %s" % [rel.tier, rel.display_name]
+		name_lbl.modulate = rel.tier_color()
 		name_lbl.mouse_entered.connect(func() -> void:
 			show_item_popup(rel, true)
 		)
@@ -824,8 +827,8 @@ func _rebuild_debug_menu() -> void:
 		var name_lbl := Label.new()
 		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		name_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
-		name_lbl.text = "%s %s (%s)" % [it.glyph, it.display_name, it.type_name()]
-		name_lbl.modulate = it.color.lerp(Color.WHITE, 0.35)
+		name_lbl.text = "%s [T%d] %s (%s)" % [it.glyph, it.tier, it.display_name, it.type_name()]
+		name_lbl.modulate = it.tier_color()
 		name_lbl.mouse_entered.connect(func() -> void:
 			show_item_popup(it, true)
 		)

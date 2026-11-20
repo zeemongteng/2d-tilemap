@@ -9,4 +9,5 @@ description = "Crystallized soul essence from a fallen archmage. Grants +2 Souls
 glyph = "*"
 color = Color(0.95, 0.82, 0.25, 1)
 type = 4
+tier = 2
 sp_amount = 2
