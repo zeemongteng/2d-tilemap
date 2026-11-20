@@ -543,25 +543,18 @@ func _draw() -> void:
 		var points := _hex_polygon(cell_to_pixel(c))
 		var in_active := is_in_current_room(c)
 		var base_col := wall_color if _tiles[c] else floor_color
-		var cur_line := line_color
 		if _sanctuary_themes.has(c):
 			if _sanctuary_themes[c] == "devil":
 				base_col = Color("160609") if _tiles[c] else Color("2b0d14")
-				cur_line = Color("701e2e")
 			elif _sanctuary_themes[c] == "treasure":
 				base_col = Color("1f1806") if _tiles[c] else Color("382c0b")
-				cur_line = Color("d9af3b")
 			elif _sanctuary_themes[c] == "shop":
 				base_col = Color("0c1c1e") if _tiles[c] else Color("173438")
-				cur_line = Color("45c4b0")
 			else:
 				base_col = Color("101b24") if _tiles[c] else Color("1f3345")
-				cur_line = Color("78b5db")
 		if not in_active:
 			base_col = base_col.darkened(0.28)
 		draw_colored_polygon(points, base_col)
-		points.append(points[0])
-		draw_polyline(points, cur_line.darkened(0.25) if not in_active else cur_line, 1.0)
 
 	# Highlight exit doorway hexes on the outer rim of the current room.
 	var exit_col := exit_ready_color if room_cleared else exit_locked_color

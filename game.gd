@@ -47,8 +47,8 @@ const SYNERGY_INFO := {
 @export var starting_items: Array[Resource]
 @export var starting_spells: Array[Resource]
 @export var spell_catalog: Array[Resource]
-@export var monster_count := 6
-@export var spawner_count := 2
+@export var monster_count := 3
+@export var spawner_count := 1
 @export var item_count := 7
 @export var relic_spawn_chance := 0.45
 @export var monster_sight := 6
@@ -158,6 +158,12 @@ static func _is_boss_room(room_num: int) -> bool:
 	return room_num >= 2 and (room_num - 2) % 3 == 0
 
 
+func _scaled_spawn_interval(base_interval: int) -> int:
+	# Starts much slower in early rooms (+4 turns in Room 1) and speeds up each room down to 2 turns.
+	var delta := 4 - int(round(float(room_level - 1) * 0.75))
+	return clampi(base_interval + delta, 2, 10)
+
+
 func _active_boss() -> Actor:
 	for m in monsters:
 		if m.is_boss and not m.is_allies and not m.is_dead():
@@ -191,22 +197,28 @@ func _populate_current_room(entry_cell: Vector2i) -> void:
 		var extra_hp := maxi(0, (room_level - 2) * 8)
 		boss.stats.max_hp += extra_hp
 		boss.stats.hp = boss.stats.max_hp
+		boss.spawn_interval = _scaled_spawn_interval(boss.spawn_interval)
+		boss.spawn_cooldown = maxi(2, boss.spawn_interval - 1)
 		monsters.append(boss)
-		for i in 2 + (room_level / 3):
+		for i in 1 + (room_level / 3):
 			var minion_cell := grid.random_floor_cell(_rng, 4, entry_cell, 5)
 			if not _is_occupied(minion_cell):
 				monsters.append(_spawn_actor(_random_monster_scene(), minion_cell))
 	else:
-		var total_spawners := spawner_count + (room_level - 1) / 2
+		var total_spawners := clampi(spawner_count + int(floor(float(room_level - 1) * 0.45)), 1, 6)
 		for i in total_spawners:
 			var cell := grid.random_floor_cell(_rng, 4, entry_cell, 5)
 			if not _is_occupied(cell):
 				var spawner := _spawn_actor(_random_spawner_scene(), cell)
 				if spawner.spawn_scene == null:
 					spawner.spawn_scene = _random_monster_scene()
+				spawner.spawn_interval = _scaled_spawn_interval(spawner.spawn_interval)
+				spawner.spawn_cooldown = maxi(2, spawner.spawn_interval - 1)
+				spawner.queue_redraw()
 				monsters.append(spawner)
 
-		var total_monsters := monster_count + (room_level - 1) * 2
+		var depth := room_level - 1
+		var total_monsters := mini(18, monster_count + depth + (depth * depth) / 8)
 		for i in total_monsters:
 			var cell := grid.random_floor_cell(_rng, 3, entry_cell, 4)
 			if not _is_occupied(cell):
