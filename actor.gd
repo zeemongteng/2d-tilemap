@@ -117,11 +117,11 @@ func distance_to_cell(target_cell: Vector2i) -> int:
 
 
 func total_attack() -> int:
-	return stats.attack + (weapon.attack_bonus if weapon != null else 0)
+	return maxi(1, stats.attack + (weapon.attack_bonus if weapon != null else 0))
 
 
 func total_defense() -> int:
-	return stats.defense + (armor.defense_bonus if armor != null else 0)
+	return maxi(0, stats.defense + (armor.defense_bonus if armor != null else 0))
 
 
 func total_spell_damage_bonus() -> int:
@@ -139,6 +139,13 @@ func total_spell_range_bonus() -> int:
 	var bonus := 0
 	for r in relics:
 		bonus += r.spell_range_bonus
+	return bonus
+
+
+func total_max_charges_bonus() -> int:
+	var bonus := 0
+	for r in relics:
+		bonus += r.max_charges_bonus
 	return bonus
 
 
@@ -182,13 +189,33 @@ func element_mastery_bonus(spell: SpellData) -> int:
 
 func add_relic(relic: ItemData) -> void:
 	relics.append(relic)
-	if relic.attack_bonus > 0:
-		stats.attack += relic.attack_bonus
-	if relic.defense_bonus > 0:
-		stats.defense += relic.defense_bonus
-	if relic.max_hp_bonus > 0:
-		stats.max_hp += relic.max_hp_bonus
-		heal(relic.max_hp_bonus)
+	if relic.attack_bonus != 0:
+		stats.attack = maxi(1, stats.attack + relic.attack_bonus)
+	if relic.defense_bonus != 0:
+		stats.defense = maxi(0, stats.defense + relic.defense_bonus)
+	if relic.max_hp_bonus != 0:
+		stats.max_hp = maxi(1, stats.max_hp + relic.max_hp_bonus)
+		if relic.max_hp_bonus > 0:
+			heal(relic.max_hp_bonus)
+		else:
+			stats.hp = mini(stats.hp, stats.max_hp)
+	if relic.max_charges_bonus != 0:
+		for s in spells:
+			if s.uses_cooldown():
+				continue
+			s.relic_charge_bonus += relic.max_charges_bonus
+			if relic.max_charges_bonus > 0:
+				s.restore_charges(relic.max_charges_bonus)
+			else:
+				s.charges = mini(s.charges, s.effective_max_charges())
+	if relic.heal_amount > 0:
+		heal(relic.heal_amount)
+	if relic.charge_restore > 0:
+		restore_all_spells(relic.charge_restore)
+	if relic.sp_amount > 0:
+		spell_points += relic.sp_amount
+	if relic.gold_amount > 0:
+		gold = mini(99, gold + relic.gold_amount)
 	if relic.relic_effect == ItemData.RelicEffect.SACRED_HEART:
 		stats.hp = stats.max_hp
 	if relic.relic_effect == ItemData.RelicEffect.HOLY_MANTLE:
@@ -214,6 +241,13 @@ func count_relic(effect: ItemData.RelicEffect) -> int:
 
 func has_relic(effect: ItemData.RelicEffect) -> bool:
 	return count_relic(effect) > 0
+
+
+func has_relic_named(relic_name: String) -> bool:
+	for r in relics:
+		if r.display_name == relic_name:
+			return true
+	return false
 
 
 # --- modular status system ------------------------------------------------
@@ -373,6 +407,9 @@ func learn_spell(template: SpellData) -> SpellData:
 	if existing != null:
 		return existing
 	var instance := template.init_runtime()
+	if not instance.uses_cooldown():
+		instance.relic_charge_bonus = total_max_charges_bonus()
+		instance.charges = instance.effective_max_charges()
 	spells.append(instance)
 	return instance
 

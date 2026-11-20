@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Shattered Lens"
+description = "Cracked spectacles that focus magic up close. +2 Spell Damage, but -1 Cast Range."
+glyph = "?"
+color = Color(0.75, 0.65, 0.85, 1)
+type = 5
+tier = 0
+spell_damage_bonus = 2
+spell_range_bonus = -1

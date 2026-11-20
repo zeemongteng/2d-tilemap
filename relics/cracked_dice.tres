@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Cracked Dice"
+description = "Chipped bone cube. Clearing a room has a 50% chance to grant +1 Soul, or 50% to lose 1¢."
+glyph = "?"
+color = Color(0.85, 0.82, 0.78, 1)
+type = 5
+tier = 0
+relic_effect = 24

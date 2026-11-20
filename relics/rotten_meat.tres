@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Rotten Meat"
+description = "Dubious cavern jerky. Permanently grants +3 Max HP and heals 3 HP."
+glyph = "?"
+color = Color(0.62, 0.45, 0.35, 1)
+type = 5
+tier = 0
+max_hp_bonus = 3

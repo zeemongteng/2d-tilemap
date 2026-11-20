@@ -45,6 +45,13 @@ enum RelicEffect {
 	HAWKS_LENS,
 	FAMILIARS_TOME,
 	ECHO_MIRROR,
+	CURSED_PENNY,
+	CRACKED_DICE,
+	SOUR_CANDY,
+	BEGGARS_CUP,
+	THORN_RING,
+	BLOOD_VIAL,
+	POCKET_SAND,
 }
 
 @export var display_name := "Item"
@@ -59,6 +66,7 @@ enum RelicEffect {
 @export var max_hp_bonus := 0
 @export var spell_damage_bonus := 0
 @export var spell_range_bonus := 0
+@export var max_charges_bonus := 0
 @export var burn_damage_bonus := 0
 @export var status_duration_bonus := 0
 @export var afflicted_damage_bonus := 0

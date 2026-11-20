@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Rusty Key"
+description = "Doesn't open any door, but you found spare change stuck to it. (+1 Max HP, +1 Soul, +3¢)"
+glyph = "?"
+color = Color(0.75, 0.5, 0.3, 1)
+type = 5
+tier = 0
+max_hp_bonus = 1
+sp_amount = 1
+gold_amount = 3

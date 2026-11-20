@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Bent Spoon"
+description = "Warped silverware humming with faint telekinesis. +1 Cast Range, but -1 ATK."
+glyph = "?"
+color = Color(0.72, 0.76, 0.82, 1)
+type = 5
+tier = 0
+spell_range_bonus = 1
+attack_bonus = -1

@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Pocket Sand"
+description = "Fine cavern grit. Melee attackers have a 25% chance to be Feared for 2 turns."
+glyph = "?"
+color = Color(0.88, 0.8, 0.55, 1)
+type = 5
+tier = 1
+relic_effect = 29

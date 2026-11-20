@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Tin Can"
+description = "Dented metal scrap strapped to your chest. +2 Max HP and +1 DEF, but -1 Spell Damage."
+glyph = "?"
+color = Color(0.6, 0.65, 0.68, 1)
+type = 5
+tier = 0
+max_hp_bonus = 2
+defense_bonus = 1
+spell_damage_bonus = -1

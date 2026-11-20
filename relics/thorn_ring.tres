@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Thorn Ring"
+description = "Prickly briar band. Reflects 2 damage back whenever a foe strikes you in melee."
+glyph = "?"
+color = Color(0.55, 0.82, 0.42, 1)
+type = 5
+tier = 1
+relic_effect = 27

@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Pocket Lint"
+description = "A fuzzy clump of grey fluff. Somehow comforting. (+1 Max HP, +1¢ on pickup)"
+glyph = "?"
+color = Color(0.68, 0.68, 0.72, 1)
+type = 5
+tier = 0
+max_hp_bonus = 1
+gold_amount = 1

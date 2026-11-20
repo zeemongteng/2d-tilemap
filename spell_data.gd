@@ -42,6 +42,7 @@ enum Pattern { SINGLE, BLAST, BEAM, CHAIN, BLINK, NOVA, SUMMON, DASH }
 var charges := 5
 var cooldown_remaining := 0
 var level := 1
+var relic_charge_bonus := 0
 ## Ids of the upgrade branches picked so far (see SpellBranches).
 var branches: Array[String] = []
 
@@ -49,6 +50,7 @@ var branches: Array[String] = []
 func init_runtime() -> SpellData:
 	var copy := duplicate() as SpellData
 	copy.level = 1
+	copy.relic_charge_bonus = 0
 	copy.branches = []
 	copy.charges = copy.effective_max_charges()
 	copy.cooldown_remaining = 0
@@ -122,7 +124,7 @@ func effective_damage() -> int:
 
 
 func effective_max_charges() -> int:
-	return maxi(1, max_charges + (level - 1) * bonus_charges_per_level + branch_stat("charges"))
+	return maxi(1, max_charges + (level - 1) * bonus_charges_per_level + branch_stat("charges") + relic_charge_bonus)
 
 
 func effective_range() -> int:

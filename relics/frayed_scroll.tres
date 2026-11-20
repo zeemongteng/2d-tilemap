@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Frayed Scroll"
+description = "Half-legible arcane notes. Grants +1 Spell Damage and +1 Soul on pickup."
+glyph = "?"
+color = Color(0.82, 0.75, 0.95, 1)
+type = 5
+tier = 1
+spell_damage_bonus = 1
+sp_amount = 1

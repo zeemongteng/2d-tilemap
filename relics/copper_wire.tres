@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Copper Wire"
+description = "Coiled filament that holds extra charge. Permanently grants +1 Max Spell Charge to all spells."
+glyph = "?"
+color = Color(0.88, 0.55, 0.3, 1)
+type = 5
+tier = 1
+max_charges_bonus = 1

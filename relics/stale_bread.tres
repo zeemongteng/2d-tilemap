@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Stale Bread"
+description = "Hard as a brick, yet surprisingly filling. Permanently grants +4 Max HP (heals 4 HP)."
+glyph = "?"
+color = Color(0.85, 0.72, 0.45, 1)
+type = 5
+tier = 1
+max_hp_bonus = 4

@@ -91,6 +91,28 @@
 [ext_resource type="Resource" path="res://spells/poison_sting.tres" id="90_sting"]
 [ext_resource type="Resource" path="res://spells/static_spark.tres" id="91_spark"]
 [ext_resource type="Resource" path="res://spells/shadow_bolt.tres" id="92_shadow"]
+[ext_resource type="Resource" path="res://relics/rotten_meat.tres" id="93_r_rotten_meat"]
+[ext_resource type="Resource" path="res://relics/lint_ball.tres" id="94_r_lint_ball"]
+[ext_resource type="Resource" path="res://relics/bent_spoon.tres" id="95_r_bent_spoon"]
+[ext_resource type="Resource" path="res://relics/tin_can.tres" id="96_r_tin_can"]
+[ext_resource type="Resource" path="res://relics/lead_boots.tres" id="97_r_lead_boots"]
+[ext_resource type="Resource" path="res://relics/shattered_lens.tres" id="98_r_shattered_lens"]
+[ext_resource type="Resource" path="res://relics/moths_wing.tres" id="99_r_moths_wing"]
+[ext_resource type="Resource" path="res://relics/rusty_key.tres" id="100_r_rusty_key"]
+[ext_resource type="Resource" path="res://relics/cursed_penny.tres" id="101_r_cursed_penny"]
+[ext_resource type="Resource" path="res://relics/cracked_dice.tres" id="102_r_cracked_dice"]
+[ext_resource type="Resource" path="res://relics/sour_candy.tres" id="103_r_sour_candy"]
+[ext_resource type="Resource" path="res://relics/beggars_cup.tres" id="104_r_beggars_cup"]
+[ext_resource type="Resource" path="res://relics/stale_bread.tres" id="105_r_stale_bread"]
+[ext_resource type="Resource" path="res://relics/whetstone.tres" id="106_r_whetstone"]
+[ext_resource type="Resource" path="res://relics/iron_buckle.tres" id="107_r_iron_buckle"]
+[ext_resource type="Resource" path="res://relics/copper_wire.tres" id="108_r_copper_wire"]
+[ext_resource type="Resource" path="res://relics/mana_battery.tres" id="109_r_mana_battery"]
+[ext_resource type="Resource" path="res://relics/frayed_scroll.tres" id="110_r_frayed_scroll"]
+[ext_resource type="Resource" path="res://relics/charred_twig.tres" id="111_r_charred_twig"]
+[ext_resource type="Resource" path="res://relics/thorn_ring.tres" id="112_r_thorn_ring"]
+[ext_resource type="Resource" path="res://relics/blood_vial.tres" id="113_r_blood_vial"]
+[ext_resource type="Resource" path="res://relics/pocket_sand.tres" id="114_r_pocket_sand"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_game")
@@ -101,7 +123,7 @@ spawner_pool = Array[PackedScene]([ExtResource("23_spawner"), ExtResource("23_sp
 boss_pool = Array[PackedScene]([ExtResource("31_boss"), ExtResource("47_bone_lord"), ExtResource("48_pyre_warden"), ExtResource("85_broodmother"), ExtResource("86_glacial_sovereign"), ExtResource("87_tempest_archon")])
 world_item_scene = ExtResource("5_world_item")
 item_pool = Array[Resource]([ExtResource("7_sword"), ExtResource("8_axe"), ExtResource("70_dagger"), ExtResource("71_brand"), ExtResource("72_staff"), ExtResource("9_leather"), ExtResource("10_mail"), ExtResource("73_robes"), ExtResource("74_plate"), ExtResource("11_potion"), ExtResource("11_potion"), ExtResource("75_gpotion"), ExtResource("76_elixir"), ExtResource("12_mana"), ExtResource("12_mana"), ExtResource("13_orb"), ExtResource("77_gorb"), ExtResource("78_bomb"), ExtResource("78_bomb"), ExtResource("79_pill"), ExtResource("79_pill"), ExtResource("84_penny"), ExtResource("84_penny"), ExtResource("88_nickel")])
-relic_pool = Array[Resource]([ExtResource("24_r_blood"), ExtResource("25_r_vajra"), ExtResource("26_r_anchor"), ExtResource("27_r_storm"), ExtResource("28_r_prism"), ExtResource("29_r_cinder"), ExtResource("30_r_permafrost"), ExtResource("61_r_gas"), ExtResource("62_r_fang"), ExtResource("63_r_bandolier"), ExtResource("64_r_soul"), ExtResource("65_r_uke"), ExtResource("66_r_penny"), ExtResource("67_r_lens"), ExtResource("82_r_tome"), ExtResource("83_r_echo")])
+relic_pool = Array[Resource]([ExtResource("24_r_blood"), ExtResource("25_r_vajra"), ExtResource("26_r_anchor"), ExtResource("27_r_storm"), ExtResource("28_r_prism"), ExtResource("29_r_cinder"), ExtResource("30_r_permafrost"), ExtResource("61_r_gas"), ExtResource("62_r_fang"), ExtResource("63_r_bandolier"), ExtResource("64_r_soul"), ExtResource("65_r_uke"), ExtResource("66_r_penny"), ExtResource("67_r_lens"), ExtResource("82_r_tome"), ExtResource("83_r_echo"), ExtResource("93_r_rotten_meat"), ExtResource("94_r_lint_ball"), ExtResource("95_r_bent_spoon"), ExtResource("96_r_tin_can"), ExtResource("97_r_lead_boots"), ExtResource("98_r_shattered_lens"), ExtResource("99_r_moths_wing"), ExtResource("100_r_rusty_key"), ExtResource("101_r_cursed_penny"), ExtResource("102_r_cracked_dice"), ExtResource("103_r_sour_candy"), ExtResource("104_r_beggars_cup"), ExtResource("105_r_stale_bread"), ExtResource("106_r_whetstone"), ExtResource("107_r_iron_buckle"), ExtResource("108_r_copper_wire"), ExtResource("109_r_mana_battery"), ExtResource("110_r_frayed_scroll"), ExtResource("111_r_charred_twig"), ExtResource("112_r_thorn_ring"), ExtResource("113_r_blood_vial"), ExtResource("114_r_pocket_sand")])
 devil_pool = Array[Resource]([ExtResource("35_the_mark"), ExtResource("36_vampiric_maw"), ExtResource("33_brimstone"), ExtResource("68_r_glass"), ExtResource("59_drain"), ExtResource("58_meteor")])
 angel_pool = Array[Resource]([ExtResource("37_sacred_heart"), ExtResource("38_holy_mantle"), ExtResource("34_divine_smite"), ExtResource("69_r_phoenix"), ExtResource("60_angel")])
 starting_items = Array[Resource]([ExtResource("12_mana"), ExtResource("11_potion")])

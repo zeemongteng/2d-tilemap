@@ -315,6 +315,15 @@ func _on_next_room_confirmed(edge_cell: Vector2i) -> void:
 		if target.is_dead():
 			_handle_monster_death(target)
 
+	# Sour Candy (T0): poisons a random foe for 2 turns when entering a new room.
+	var candy_count := player.count_relic(ItemData.RelicEffect.SOUR_CANDY)
+	hostiles = _hostile_actors()
+	if candy_count > 0 and not hostiles.is_empty():
+		var victim := hostiles[_rng.randi_range(0, hostiles.size() - 1)]
+		victim.apply_status(POISON_STATUS, 2 * candy_count + player.total_status_duration_bonus())
+		grid.play_spell_vfx([victim.cell], Color(0.55, 0.95, 0.25))
+		hud.post("Sour Candy upsets %s's stomach (Poisoned)!" % victim.display_name.to_lower())
+
 	_busy = false
 	_refresh_hud()
 	_refresh_hover()
@@ -427,7 +436,7 @@ func _build_sanctuary_offers(is_angel: bool, count: int) -> Array[ItemData]:
 	for res in pool:
 		if res is ItemData:
 			var it := (res as ItemData).duplicate() as ItemData
-			if it.type == ItemData.Type.RELIC and player.has_relic(it.relic_effect):
+			if it.type == ItemData.Type.RELIC and player.has_relic_named(it.display_name):
 				continue
 			if not is_angel and it.hp_cost <= 0:
 				it.hp_cost = 4
@@ -445,17 +454,18 @@ func _build_sanctuary_offers(is_angel: bool, count: int) -> Array[ItemData]:
 			ped.description = sp.describe_details()
 			ped.glyph = "★"
 			ped.color = sp.color
+			ped.tier = 4
 			ped.granted_spell = sp
 			ped.hp_cost = 0 if is_angel else 6
 			candidates.append(ped)
 
-	# Pad with unowned general relics if needed so there are always 3 offers.
+	# Pad with unowned Tier 1+ general relics if needed so there are always 3 offers.
 	for res in relic_pool:
 		if candidates.size() >= count + 2:
 			break
 		if res is ItemData:
 			var rel := (res as ItemData).duplicate() as ItemData
-			if not player.has_relic(rel.relic_effect):
+			if rel.tier >= 1 and not player.has_relic_named(rel.display_name):
 				rel.hp_cost = 0 if is_angel else 4
 				candidates.append(rel)
 
@@ -480,7 +490,7 @@ func _build_treasure_offers(count: int) -> Array[ItemData]:
 	for res in relic_pool:
 		if res is ItemData:
 			var rel := (res as ItemData).duplicate() as ItemData
-			if not player.has_relic(rel.relic_effect):
+			if not player.has_relic_named(rel.display_name):
 				rel.hp_cost = 0
 				candidates.append(rel)
 	for res in spell_catalog:
@@ -497,14 +507,15 @@ func _build_treasure_offers(count: int) -> Array[ItemData]:
 			ped.description = sp.describe_details()
 			ped.glyph = "★"
 			ped.color = sp.color
+			ped.tier = clampi(sp.learn_cost, 1, 4)
 			ped.granted_spell = sp
 			ped.hp_cost = 0
 			candidates.append(ped)
 	var chosen: Array[ItemData] = []
 	while chosen.size() < count and not candidates.is_empty():
-		var idx := _rng.randi_range(0, candidates.size() - 1)
-		chosen.append(candidates[idx])
-		candidates.remove_at(idx)
+		var pick := _pick_weighted_item(candidates, 0.25)
+		chosen.append(pick)
+		candidates.erase(pick)
 	return chosen
 
 
@@ -1000,7 +1011,7 @@ func _random_item(high_tier_bias := 0.0) -> ItemData:
 	return _pick_weighted_item(typed, high_tier_bias)
 
 
-func _random_relic(high_tier_bias := 0.0) -> ItemData:
+func _random_relic(high_tier_bias := 0.0, min_tier := 0) -> ItemData:
 	if relic_pool.is_empty():
 		return null
 	var unowned: Array[ItemData] = []
@@ -1008,12 +1019,16 @@ func _random_relic(high_tier_bias := 0.0) -> ItemData:
 	for res in relic_pool:
 		if res is ItemData:
 			var r := res as ItemData
+			if r.tier < min_tier:
+				continue
 			all_relics.append(r)
-			if not player.has_relic(r.relic_effect):
+			if not player.has_relic_named(r.display_name):
 				unowned.append(r)
 	if not unowned.is_empty():
 		return _pick_weighted_item(unowned, high_tier_bias)
-	return _pick_weighted_item(all_relics, high_tier_bias)
+	if not all_relics.is_empty():
+		return _pick_weighted_item(all_relics, high_tier_bias)
+	return _random_relic(high_tier_bias, 0) if min_tier > 0 else null
 
 
 func _refresh_hud() -> void:
@@ -1530,7 +1545,7 @@ func _on_debug_spawn_spell_requested(spell: SpellData, grant_directly: bool) -> 
 func _valid_spell_targets(spell: SpellData) -> Array[Vector2i]:
 	if spell.pattern == SpellData.Pattern.NOVA:
 		return grid.cells_in_radius(player.cell, spell.effective_radius(), true)
-	var r := spell.effective_range() + player.total_spell_range_bonus()
+	var r := maxi(1, spell.effective_range() + player.total_spell_range_bonus())
 	var candidates := grid.cells_in_radius(player.cell, r, true)
 	var valid: Array[Vector2i] = []
 	for c in candidates:
@@ -2369,6 +2384,8 @@ func _apply_damage_to_actor(defender: Actor, amount: int, color := Color(1, 0.3,
 			if not grid.in_sanctuary and not _room_cleared:
 				_devil_chance = maxf(0.0, _devil_chance - 8.0)
 				_angel_chance = maxf(0.0, _angel_chance - 18.0)
+			if player.has_relic(ItemData.RelicEffect.CURSED_PENNY):
+				_drop_coin_near(player.cell, 0)
 		if defender.phoenix_charges < phoenix_before:
 			grid.play_explosion(defender.cell, grid.cells_in_radius(defender.cell, 2, true), Color(1.0, 0.8, 0.2))
 			hud.post("🔥 The Phoenix Feather burns away — you rise again with %d HP!" % defender.stats.hp)
@@ -2454,6 +2471,17 @@ func _attack(attacker: Actor, defender: Actor) -> void:
 	])
 	if not defender.is_dead():
 		_apply_on_hit_statuses(attacker, defender)
+		if defender == player and not attacker.is_dead():
+			var thorn_stacks := player.count_relic(ItemData.RelicEffect.THORN_RING)
+			if thorn_stacks > 0:
+				var reflect := 2 * thorn_stacks
+				attacker.take_damage(reflect, Color(0.6, 0.9, 0.45))
+				hud.post("Thorn Ring pricks %s for %d damage!" % [attacker.display_name.to_lower(), reflect])
+				if attacker.is_dead():
+					_handle_monster_death(attacker)
+			if not attacker.is_dead() and player.has_relic(ItemData.RelicEffect.POCKET_SAND) and _rng.randf() < 0.25:
+				attacker.apply_status(FEAR_STATUS, 2 + player.total_status_duration_bonus())
+				hud.post("Pocket Sand blinds %s (Feared)!" % attacker.display_name.to_lower())
 	elif defender == player:
 		_dead = true
 		hud.post("You die. Press R to start over.")
@@ -2502,7 +2530,7 @@ func _handle_monster_death(defender: Actor) -> void:
 	if defender.is_boss:
 		hud.post("★ BOSS VANQUISHED: %s falls!%s Dropped a Relic, Mana Potion, and Coins!" % [defender.display_name, note_str])
 		if _item_at(defender.cell) == null:
-			_spawn_item(_random_relic(0.7), defender.cell)
+			_spawn_item(_random_relic(0.7, 1), defender.cell)
 		for n in grid.walkable_neighbors(defender.cell):
 			if _item_at(n) == null:
 				for it_res in starting_items:
@@ -2638,6 +2666,19 @@ func _check_room_cleared() -> void:
 	var blood_stacks := player.count_relic(ItemData.RelicEffect.BURNING_BLOOD)
 	if blood_stacks > 0:
 		player.heal(5 * blood_stacks)
+	var vial_stacks := player.count_relic(ItemData.RelicEffect.BLOOD_VIAL)
+	if vial_stacks > 0:
+		player.heal(2 * vial_stacks)
+	var cup_stacks := player.count_relic(ItemData.RelicEffect.BEGGARS_CUP)
+	if cup_stacks > 0:
+		player.gold = mini(MAX_COINS, player.gold + cup_stacks)
+	if player.has_relic(ItemData.RelicEffect.CRACKED_DICE):
+		if _rng.randf() < 0.5:
+			player.spell_points += 1
+			hud.post("🎲 Cracked Dice rolls high! (+1 Soul)")
+		elif player.gold > 0:
+			player.gold -= 1
+			hud.post("🎲 Cracked Dice rolls snake eyes... (-1¢)")
 	grid.play_spell_vfx(grid.cells_in_radius(player.cell, 2, true), Color(0.35, 0.95, 0.55))
 
 	if _is_boss_room(room_level):

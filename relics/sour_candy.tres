@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Sour Candy"
+description = "Eye-wateringly tart. Entering a new room poisons 1 random foe for 2 turns. (+1 Max HP)"
+glyph = "?"
+color = Color(0.6, 0.9, 0.3, 1)
+type = 5
+tier = 0
+max_hp_bonus = 1
+relic_effect = 25

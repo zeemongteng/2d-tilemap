@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Blood Vial"
+description = "A modest crimson phial. Heals 2 HP whenever you clear a room."
+glyph = "?"
+color = Color(0.85, 0.25, 0.32, 1)
+type = 5
+tier = 1
+relic_effect = 28

@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Cursed Penny"
+description = "Cold, unlucky copper. Whenever you take HP damage, a Penny spills onto the floor. (+1 Max HP)"
+glyph = "?"
+color = Color(0.8, 0.58, 0.25, 1)
+type = 5
+tier = 0
+max_hp_bonus = 1
+relic_effect = 23
