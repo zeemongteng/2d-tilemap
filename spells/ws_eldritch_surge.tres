@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="SpellData" format=3]
+
+[ext_resource type="Script" path="res://spell_data.gd" id="1_spell"]
+[ext_resource type="Resource" path="res://statuses/hexed.tres" id="2_status"]
+
+[resource]
+script = ExtResource("1_spell")
+display_name = "Eldritch Surge"
+description = "Channel the staff's violet gem into a 1-hex arcane blast (5 + Spell DMG) that Hexes foes for 2 turns."
+element = 3
+pattern = 1
+color = Color(0.75, 0.45, 1.0, 1)
+is_weapon_skill = true
+scales_with_attack = false
+cooldown_turns = 4
+cast_range = 5
+radius = 1
+damage = 5
+learn_cost = 0
+upgrade_cost = 99
+max_level = 1
+status_effect = ExtResource("2_status")
+status_duration = 2

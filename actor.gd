@@ -426,25 +426,38 @@ func restore_all_spells(amount: int) -> void:
 		s.restore_charges(amount)
 
 
+func get_weapon_skill() -> SpellData:
+	return weapon.get_weapon_skill() if weapon != null else null
+
+
 func recharge_all_spells() -> void:
 	for s in spells:
 		if s.uses_cooldown():
 			s.cooldown_remaining = 0
 		else:
 			s.charges = s.effective_max_charges()
+	var ws := get_weapon_skill()
+	if ws != null:
+		ws.cooldown_remaining = 0
 
 
 func tick_spell_cooldowns() -> void:
 	for s in spells:
 		s.tick_cooldown()
+	var ws := get_weapon_skill()
+	if ws != null:
+		ws.tick_cooldown()
 
 
 ## Equips a weapon or armor; the replaced piece goes back into the inventory.
-func equip(item: ItemData) -> void:
+func equip(item: ItemData, mid_combat := false) -> void:
 	var old: ItemData
 	if item.type == ItemData.Type.WEAPON:
 		old = weapon
 		weapon = item
+		var ws := get_weapon_skill()
+		if ws != null and mid_combat:
+			ws.cooldown_remaining = maxi(ws.cooldown_remaining, 2)
 	else:
 		old = armor
 		armor = item

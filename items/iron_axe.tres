@@ -2,6 +2,8 @@
 
 [ext_resource type="Script" uid="uid://12lxbvqimuf0" path="res://item_data.gd" id="1_item"]
 
+[ext_resource type="Resource" path="res://spells/ws_whirlwind_cleave.tres" id="3_wskill"]
+
 [resource]
 script = ExtResource("1_item")
 display_name = "Iron Axe"
@@ -11,3 +13,4 @@ color = Color(0.55, 0.7, 0.9, 1)
 type = 0
 tier = 1
 attack_bonus = 4
+weapon_skill = ExtResource("3_wskill")

@@ -2,6 +2,8 @@
 
 [ext_resource type="Script" path="res://item_data.gd" id="1_item"]
 
+[ext_resource type="Resource" path="res://spells/ws_eldritch_surge.tres" id="3_wskill"]
+
 [resource]
 script = ExtResource("1_item")
 display_name = "Warlock's Staff"
@@ -12,3 +14,4 @@ type = 0
 tier = 3
 attack_bonus = 1
 spell_damage_bonus = 3
+weapon_skill = ExtResource("3_wskill")

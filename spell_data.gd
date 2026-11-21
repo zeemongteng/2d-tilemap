@@ -11,6 +11,8 @@ enum Pattern { SINGLE, BLAST, BEAM, CHAIN, BLINK, NOVA, SUMMON, DASH }
 @export var pattern := Pattern.SINGLE
 @export var color := Color(1.0, 0.45, 0.2)
 @export var is_innate := false
+@export var is_weapon_skill := false
+@export var scales_with_attack := false
 
 @export_group("Stats")
 @export var max_charges := 5
@@ -215,6 +217,8 @@ func pattern_name() -> String:
 func describe_button(hotkey: String) -> String:
 	if uses_cooldown():
 		var cd_state := "READY • %dt CD" % effective_cooldown() if cooldown_remaining <= 0 else "CD: %dt" % cooldown_remaining
+		if is_weapon_skill:
+			return "[%s] ⚔ %s  (%s)" % [hotkey, display_name, cd_state]
 		var key_tag := "D/%s" % hotkey if is_innate and hotkey != "D" else hotkey
 		return "[%s] %s Lv.%d  (%s)" % [key_tag, display_name, level, cd_state]
 	return "[%s] %s Lv.%d  (%d/%d)" % [
@@ -224,12 +228,14 @@ func describe_button(hotkey: String) -> String:
 
 func describe_details() -> String:
 	var parts: Array[String] = [
-		"[%s | %s]" % [element_name(), pattern_name()],
+		"[Weapon Skill | %s]" % pattern_name() if is_weapon_skill else "[%s | %s]" % [element_name(), pattern_name()],
 	]
 	if pattern == Pattern.SUMMON:
 		parts.append("Summons Ally")
 	elif pattern == Pattern.DASH:
 		parts.append("Dodges Attacks (1t)")
+	elif scales_with_attack:
+		parts.append("ATK+%d DMG" % effective_damage() if effective_damage() > 0 else "ATK DMG")
 	elif effective_damage() > 0:
 		parts.append("%d DMG" % effective_damage())
 	if effective_range() > 0:

@@ -3,6 +3,8 @@
 [ext_resource type="Script" path="res://item_data.gd" id="1_item"]
 [ext_resource type="Resource" path="res://statuses/poison.tres" id="2_poison"]
 
+[ext_resource type="Resource" path="res://spells/ws_toxic_fan.tres" id="3_wskill"]
+
 [resource]
 script = ExtResource("1_item")
 display_name = "Venom Dagger"
@@ -14,3 +16,4 @@ tier = 2
 attack_bonus = 2
 on_hit_status = ExtResource("2_poison")
 on_hit_status_duration = 3
+weapon_skill = ExtResource("3_wskill")

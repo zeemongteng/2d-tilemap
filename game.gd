@@ -6,6 +6,7 @@ extends Node2D
 const STEP_TIME := 0.08
 const MAX_INVENTORY := 9
 const MAX_COINS := 99
+const WEAPON_SKILL_SLOT := -2
 const SPELL_HOTKEYS: Array[Key] = [KEY_Q, KEY_W, KEY_E, KEY_F, KEY_G, KEY_C, KEY_Z, KEY_X, KEY_V, KEY_T]
 const PENNY_ITEM: ItemData = preload("res://items/penny.tres")
 const NICKEL_ITEM: ItemData = preload("res://items/nickel.tres")
@@ -95,6 +96,7 @@ func _ready() -> void:
 			typed_catalog.append(res as SpellData)
 	hud.set_spell_catalog(typed_catalog)
 	hud.spell_selected.connect(_on_hud_spell_selected)
+	hud.weapon_skill_selected.connect(_on_hud_weapon_skill_selected)
 	hud.item_selected.connect(_on_hud_item_selected)
 	hud.spell_learn_requested.connect(_on_spell_learn_requested)
 	hud.spell_upgrade_requested.connect(_on_spell_upgrade_requested)
@@ -1160,6 +1162,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		if _busy:
 			_cancel_walk = true
 			return
+		if event.keycode == KEY_A:
+			_on_hud_weapon_skill_selected()
+			return
 		if event.keycode in [KEY_D, KEY_SHIFT]:
 			for i in player.spells.size():
 				if player.spells[i].is_innate:
@@ -1196,22 +1201,50 @@ func _refresh_hover() -> void:
 		grid.clear_spell_preview()
 		return
 
-	if _active_spell_index >= 0 and _active_spell_index < player.spells.size():
-		var spell := player.spells[_active_spell_index]
-		var range_cells := _valid_spell_targets(spell)
+	var active_sp := _get_active_spell()
+	if active_sp != null:
+		var range_cells := _valid_spell_targets(active_sp)
 		var aoe_cells: Array[Vector2i] = []
-		if spell.pattern == SpellData.Pattern.NOVA:
-			aoe_cells = _compute_spell_aoe(spell, player.cell)
+		if active_sp.pattern == SpellData.Pattern.NOVA:
+			aoe_cells = _compute_spell_aoe(active_sp, player.cell)
 		elif range_cells.has(cell):
-			aoe_cells = _compute_spell_aoe(spell, cell)
+			aoe_cells = _compute_spell_aoe(active_sp, cell)
 		grid.set_hover(cell, [])
-		grid.set_spell_preview(range_cells, aoe_cells, spell.color)
+		grid.set_spell_preview(range_cells, aoe_cells, active_sp.color)
 	else:
 		grid.clear_spell_preview()
 		grid.set_hover(cell, _path_to(cell))
 
 
+func _get_active_spell() -> SpellData:
+	if _active_spell_index == WEAPON_SKILL_SLOT:
+		return player.get_weapon_skill()
+	if _active_spell_index >= 0 and _active_spell_index < player.spells.size():
+		return player.spells[_active_spell_index]
+	return null
+
+
 # --- HUD callbacks & Grimoire ---------------------------------------------
+
+func _on_hud_weapon_skill_selected() -> void:
+	if _busy or _dead:
+		return
+	var ws := player.get_weapon_skill()
+	if ws == null:
+		hud.post("Equip a weapon to use a Weapon Skill!")
+		return
+	if not ws.is_ready():
+		hud.post("⚔ %s is on cooldown (%d turn(s) remaining)!" % [ws.display_name, ws.cooldown_remaining])
+		return
+	if _active_spell_index == WEAPON_SKILL_SLOT:
+		if ws.pattern == SpellData.Pattern.NOVA:
+			_try_cast_active_spell(player.cell)
+		else:
+			_cancel_spell_aim()
+		return
+	_active_spell_index = WEAPON_SKILL_SLOT
+	_refresh_hud()
+	_refresh_hover()
 
 func _on_hud_spell_selected(index: int) -> void:
 	if _busy or _dead:
@@ -1545,7 +1578,7 @@ func _on_debug_spawn_spell_requested(spell: SpellData, grant_directly: bool) -> 
 func _valid_spell_targets(spell: SpellData) -> Array[Vector2i]:
 	if spell.pattern == SpellData.Pattern.NOVA:
 		return grid.cells_in_radius(player.cell, spell.effective_radius(), true)
-	var r := maxi(1, spell.effective_range() + player.total_spell_range_bonus())
+	var r := spell.effective_range() if spell.scales_with_attack else maxi(1, spell.effective_range() + player.total_spell_range_bonus())
 	var candidates := grid.cells_in_radius(player.cell, r, true)
 	var valid: Array[Vector2i] = []
 	for c in candidates:
@@ -1609,9 +1642,9 @@ func _compute_chain_cells(start_cell: Vector2i, jump_range: int, max_jumps: int)
 
 
 func _try_cast_active_spell(target_cell: Vector2i) -> void:
-	if _active_spell_index < 0 or _active_spell_index >= player.spells.size():
+	var spell := _get_active_spell()
+	if spell == null:
 		return
-	var spell := player.spells[_active_spell_index]
 	var valid_targets := _valid_spell_targets(spell)
 	if spell.pattern != SpellData.Pattern.NOVA and not valid_targets.has(target_cell):
 		hud.post("Invalid target (out of range, occupied, or blocked line of sight).")
@@ -1624,7 +1657,7 @@ func _cast_spell(spell: SpellData, target_cell: Vector2i) -> void:
 	_active_spell_index = -1
 	grid.clear_spell_preview()
 
-	var free_cast := player.has_relic(ItemData.RelicEffect.ARCANE_PRISM) and _rng.randf() < 0.35
+	var free_cast := (not spell.is_weapon_skill) and player.has_relic(ItemData.RelicEffect.ARCANE_PRISM) and _rng.randf() < 0.35
 	if not free_cast and spell.has_branch("gen_spellweaver") and _rng.randf() < 0.3:
 		free_cast = true
 	if spell.uses_cooldown():
@@ -1680,11 +1713,12 @@ func _cast_spell(spell: SpellData, target_cell: Vector2i) -> void:
 			player.queue_redraw()
 
 	var vfx_tween: Tween
-	if spell.pattern == SpellData.Pattern.BLAST and spell.effective_damage() > 0:
+	var deals_dmg := spell.effective_damage() > 0 or spell.scales_with_attack
+	if spell.pattern == SpellData.Pattern.BLAST and deals_dmg:
 		vfx_tween = grid.play_explosion(target_cell, aoe_cells, spell.color)
-	elif spell.pattern == SpellData.Pattern.NOVA and spell.effective_damage() > 0:
+	elif spell.pattern == SpellData.Pattern.NOVA and deals_dmg:
 		vfx_tween = grid.play_explosion(player.cell, aoe_cells, spell.color)
-	elif spell.pattern == SpellData.Pattern.BLINK and spell.effective_radius() > 0 and spell.effective_damage() > 0:
+	elif spell.pattern == SpellData.Pattern.BLINK and spell.effective_radius() > 0 and deals_dmg:
 		vfx_tween = grid.play_explosion(target_cell, aoe_cells, spell.color)
 	else:
 		vfx_tween = grid.play_spell_vfx(aoe_cells, spell.color, arc_points)
@@ -1742,9 +1776,9 @@ func _cast_spell(spell: SpellData, target_cell: Vector2i) -> void:
 		var overlaps: int = int(overlap_counts.get(m, 1))
 		hit_names.append(_spell_strike(spell, m, overlaps, target_cell, secondary_victims))
 
-	if aoe_cells.has(player.cell) and (spell.effective_damage() > 0 or spell.status_effect != null):
-		if spell.effective_damage() > 0:
-			var raw_self := spell.effective_damage() + bonus_dmg
+	if aoe_cells.has(player.cell) and (spell.effective_damage() > 0 or spell.scales_with_attack or spell.status_effect != null):
+		if spell.effective_damage() > 0 or spell.scales_with_attack:
+			var raw_self := (player.total_attack() + spell.effective_damage()) if spell.scales_with_attack else (spell.effective_damage() + bonus_dmg)
 			var self_dmg := maxi(1, int(ceil(float(raw_self - player.total_defense()) * player.incoming_damage_multiplier())))
 			if spell.element == SpellData.Element.FIRE:
 				player.consume_shatter_statuses()
@@ -1754,10 +1788,11 @@ func _cast_spell(spell: SpellData, target_cell: Vector2i) -> void:
 			var extra_self_dot := bonus_burn if spell.status_effect.id == "burn" else 0
 			player.apply_status(spell.status_effect, spell.effective_status_duration(), extra_self_dot)
 
+	var verb := "use ⚔" if spell.is_weapon_skill else "cast"
 	if hit_names.is_empty():
-		hud.post("You cast %s.%s" % [spell.display_name, free_note])
+		hud.post("You %s %s.%s" % [verb, spell.display_name, free_note])
 	else:
-		hud.post("You cast %s, hitting %s.%s" % [spell.display_name, ", ".join(hit_names), free_note])
+		hud.post("You %s %s, hitting %s.%s" % [verb, spell.display_name, ", ".join(hit_names), free_note])
 		if spell.effective_heal() > 0 and not hit_monsters.is_empty():
 			var drained := spell.effective_heal() * hit_monsters.size()
 			player.heal(drained)
@@ -1779,8 +1814,9 @@ func _cast_spell(spell: SpellData, target_cell: Vector2i) -> void:
 
 	if struck_zap_origin != null and not struck_zap_origin.is_dead() and _has_synergy("Thunderstruck") and _rng.randf() < 0.5:
 		_ukulele_zap(struck_zap_origin, maxi(1, player.count_relic(ItemData.RelicEffect.UKULELE)))
-	_apply_cast_riders(spell, hit_monsters.size())
-	_trigger_echo_mirror(spell, target_cell)
+	if not spell.is_weapon_skill:
+		_apply_cast_riders(spell, hit_monsters.size())
+		_trigger_echo_mirror(spell, target_cell)
 
 	if player.is_dead():
 		_dead = true
@@ -1886,7 +1922,13 @@ func _foe_blast(origin: Vector2i, blast_radius: int, blast_damage: int, blast_co
 func _spell_strike(spell: SpellData, m: Actor, overlaps: int, target_cell: Vector2i, secondary: Array[Actor]) -> String:
 	var bonus_dur := player.total_status_duration_bonus()
 	var bonus_burn := player.total_burn_damage_bonus()
-	var dmg := spell.effective_damage() + player.total_spell_damage_bonus() + player.element_mastery_bonus(spell)
+	var dmg := 0
+	if spell.scales_with_attack:
+		dmg = player.total_attack() + spell.effective_damage()
+	elif spell.is_weapon_skill:
+		dmg = spell.effective_damage() + player.total_spell_damage_bonus()
+	else:
+		dmg = spell.effective_damage() + player.total_spell_damage_bonus() + player.element_mastery_bonus(spell)
 	if _has_synergy("Sniper's Mark"):
 		dmg += mini(6, m.distance_to_cell(player.cell))
 	if m.has_any_status():
@@ -2130,8 +2172,10 @@ func _use_item(index: int) -> void:
 			_acquire_relic(item)
 			hud.post("★ RELIC ACQUIRED: %s! %s" % [item.display_name, item.description])
 		_:
-			player.equip(item)
-			hud.post("You equip the %s." % item.display_name.to_lower())
+			var mid_combat := (not _room_cleared) and (_hostile_count() > 0)
+			player.equip(item, mid_combat)
+			var ws_note := " (⚔ Skill: %s)" % item.weapon_skill.display_name if item.weapon_skill != null else ""
+			hud.post("You equip the %s%s." % [item.display_name.to_lower(), ws_note])
 	await _advance_turn()
 
 

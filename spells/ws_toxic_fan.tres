@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="SpellData" format=3]
+
+[ext_resource type="Script" path="res://spell_data.gd" id="1_spell"]
+[ext_resource type="Resource" path="res://statuses/poison.tres" id="2_status"]
+
+[resource]
+script = ExtResource("1_spell")
+display_name = "Toxic Fan"
+description = "Hurl a fan of venom-coated daggers in a small burst, dealing ATK damage and poisoning foes for 3 turns."
+element = 4
+pattern = 1
+color = Color(0.55, 0.92, 0.25, 1)
+is_weapon_skill = true
+scales_with_attack = true
+cooldown_turns = 4
+cast_range = 4
+radius = 1
+damage = 0
+learn_cost = 0
+upgrade_cost = 99
+max_level = 1
+status_effect = ExtResource("2_status")
+status_duration = 3

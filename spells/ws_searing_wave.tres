@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="SpellData" format=3]
+
+[ext_resource type="Script" path="res://spell_data.gd" id="1_spell"]
+[ext_resource type="Resource" path="res://statuses/burn.tres" id="2_status"]
+
+[resource]
+script = ExtResource("1_spell")
+display_name = "Searing Wave"
+description = "Unleash a 4-hex wave of forge-fire from the greatsword, dealing ATK+3 damage and burning foes for 3 turns."
+element = 0
+pattern = 2
+color = Color(1.0, 0.48, 0.15, 1)
+is_weapon_skill = true
+scales_with_attack = true
+cooldown_turns = 4
+cast_range = 4
+radius = 0
+damage = 3
+learn_cost = 0
+upgrade_cost = 99
+max_level = 1
+status_effect = ExtResource("2_status")
+status_duration = 3

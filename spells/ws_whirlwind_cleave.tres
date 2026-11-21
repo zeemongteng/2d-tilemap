@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="SpellData" format=3]
+
+[ext_resource type="Script" path="res://spell_data.gd" id="1_spell"]
+
+[resource]
+script = ExtResource("1_spell")
+display_name = "Whirlwind Cleave"
+description = "Spin your battleaxe in a brutal 360-degree arc, cleaving every adjacent foe for ATK+2 damage."
+element = 3
+pattern = 5
+color = Color(0.65, 0.82, 1.0, 1)
+is_weapon_skill = true
+scales_with_attack = true
+cooldown_turns = 4
+cast_range = 0
+radius = 1
+damage = 2
+learn_cost = 0
+upgrade_cost = 99
+max_level = 1

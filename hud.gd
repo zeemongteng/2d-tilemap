@@ -2,6 +2,7 @@ class_name Hud
 extends CanvasLayer
 
 signal spell_selected(index: int)
+signal weapon_skill_selected()
 signal item_selected(index: int)
 signal spell_learn_requested(template: SpellData)
 signal spell_upgrade_requested(spell: SpellData, branch_id: String)
@@ -240,10 +241,15 @@ func show_spell_popup(spell: SpellData, from_ui := true) -> void:
 	_ui_hover_active = from_ui
 	var bonus_dmg := 0
 	if _last_player != null:
-		bonus_dmg = _last_player.total_spell_damage_bonus() + _last_player.element_mastery_bonus(spell)
-	var bonus_rng := _last_player.total_spell_range_bonus() if _last_player != null else 0
-	var eff_rng := spell.effective_range() + (bonus_rng if spell.effective_range() > 0 else 0)
-	popup_title.text = "%s (Lv.%d/%d)" % [spell.display_name, spell.level, spell.max_level]
+		if spell.scales_with_attack:
+			bonus_dmg = _last_player.total_attack()
+		elif spell.is_weapon_skill:
+			bonus_dmg = _last_player.total_spell_damage_bonus()
+		else:
+			bonus_dmg = _last_player.total_spell_damage_bonus() + _last_player.element_mastery_bonus(spell)
+	var bonus_rng := _last_player.total_spell_range_bonus() if (_last_player != null and not spell.scales_with_attack) else 0
+	var eff_rng := maxi(1, spell.effective_range() + bonus_rng) if spell.effective_range() > 0 else 0
+	popup_title.text = "⚔ %s (Weapon Skill)" % spell.display_name if spell.is_weapon_skill else "%s (Lv.%d/%d)" % [spell.display_name, spell.level, spell.max_level]
 	popup_title.modulate = spell.color.lerp(Color.WHITE, 0.35)
 	var range_part := "  •  Rng %d" % eff_rng if eff_rng > 0 else ""
 	var dmg_part := ""
@@ -424,6 +430,31 @@ func _rebuild_spells(player: Actor, active_spell_idx: int) -> void:
 	for child in spell_list.get_children():
 		child.queue_free()
 
+	var weapon_skill := player.get_weapon_skill()
+	if weapon_skill != null:
+		var wbtn := Button.new()
+		wbtn.focus_mode = Control.FOCUS_NONE
+		wbtn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		var w_active := active_spell_idx == -2
+		var w_prefix := ">> " if w_active else ""
+		var w_dmg := (player.total_attack() + weapon_skill.effective_damage()) if weapon_skill.scales_with_attack else (weapon_skill.effective_damage() + player.total_spell_damage_bonus())
+		wbtn.text = "%s%s  •  %d DMG" % [w_prefix, weapon_skill.describe_button("A"), w_dmg]
+		if not weapon_skill.is_ready():
+			wbtn.modulate = Color(0.55, 0.55, 0.55)
+		elif w_active:
+			wbtn.modulate = Color(1.0, 0.92, 0.45)
+		else:
+			wbtn.modulate = weapon_skill.color.lerp(Color.WHITE, 0.45)
+		var ws_ref := weapon_skill
+		wbtn.pressed.connect(func() -> void:
+			weapon_skill_selected.emit()
+		)
+		wbtn.mouse_entered.connect(func() -> void:
+			show_spell_popup(ws_ref, true)
+		)
+		wbtn.mouse_exited.connect(hide_popup)
+		spell_list.add_child(wbtn)
+
 	var bonus_dmg := player.total_spell_damage_bonus()
 	for i in player.spells.size():
 		var spell := player.spells[i]
@@ -458,7 +489,12 @@ func _rebuild_spells(player: Actor, active_spell_idx: int) -> void:
 		btn.mouse_exited.connect(hide_popup)
 		spell_list.add_child(btn)
 
-	if active_spell_idx >= 0 and active_spell_idx < player.spells.size():
+	if active_spell_idx == -2 and weapon_skill != null:
+		targeting_banner.visible = true
+		targeting_banner.text = "Aiming ⚔ %s (%s)\nClick highlighted hex to use • Right-click/Esc to cancel" % [
+			weapon_skill.display_name, weapon_skill.pattern_name()
+		]
+	elif active_spell_idx >= 0 and active_spell_idx < player.spells.size():
 		var active := player.spells[active_spell_idx]
 		targeting_banner.visible = true
 		targeting_banner.text = "Aiming %s (%s)\nClick highlighted hex to cast • Right-click/Esc to cancel" % [

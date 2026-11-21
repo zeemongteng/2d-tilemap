@@ -3,6 +3,8 @@
 [ext_resource type="Script" path="res://item_data.gd" id="1_item"]
 [ext_resource type="Resource" path="res://statuses/burn.tres" id="2_burn"]
 
+[ext_resource type="Resource" path="res://spells/ws_searing_wave.tres" id="3_wskill"]
+
 [resource]
 script = ExtResource("1_item")
 display_name = "Flame Brand"
@@ -14,3 +16,4 @@ tier = 3
 attack_bonus = 5
 on_hit_status = ExtResource("2_burn")
 on_hit_status_duration = 2
+weapon_skill = ExtResource("3_wskill")

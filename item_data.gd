@@ -79,6 +79,8 @@ enum RelicEffect {
 @export var is_on_sale := false
 @export var uses_left := 2
 @export var granted_spell: SpellData
+## Active cooldown ability granted while this weapon is equipped.
+@export var weapon_skill: SpellData
 @export var relic_effect := RelicEffect.NONE
 ## Status inflicted on foes by the wielder's melee hits (weapons and relics).
 @export var on_hit_status: StatusData
@@ -87,6 +89,16 @@ enum RelicEffect {
 @export var blast_damage := 0
 @export var blast_radius := 1
 
+var runtime_weapon_skill: SpellData
+
+
+func get_weapon_skill() -> SpellData:
+	if weapon_skill == null:
+		return null
+	if runtime_weapon_skill == null:
+		runtime_weapon_skill = weapon_skill.init_runtime()
+	return runtime_weapon_skill
+
 
 func gear_extras() -> String:
 	var parts: Array[String] = []
@@ -94,6 +106,8 @@ func gear_extras() -> String:
 		parts.append("%+d Spell DMG" % spell_damage_bonus)
 	if on_hit_status != null:
 		parts.append("inflicts %s" % on_hit_status.display_name)
+	if weapon_skill != null:
+		parts.append("Skill: %s (%dt CD)" % [weapon_skill.display_name, weapon_skill.cooldown_turns])
 	if parts.is_empty():
 		return ""
 	return "  •  " + ", ".join(parts)
