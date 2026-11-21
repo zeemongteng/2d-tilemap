@@ -16,6 +16,7 @@ description = "Bloated sac of volatile rift energy. Explodes when slain, hurting
 glyph = "B"
 color = Color(1, 0.4, 0.55, 1)
 stats = SubResource("Resource_stats")
+elemental_type = 0
 loot_chance = 0.3
 min_room = 3
 death_blast_damage = 6

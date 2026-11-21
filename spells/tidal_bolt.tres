@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="SpellData" format=3]
+
+[ext_resource type="Script" path="res://spell_data.gd" id="1_spell"]
+[ext_resource type="Resource" path="res://statuses/wet.tres" id="2_wet"]
+
+[resource]
+script = ExtResource("1_spell")
+display_name = "Tidal Bolt"
+description = "Hurls a pressurized jet of water that drenches the target hex into a Water tile and inflicts Wet (+50% Lightning DMG taken)."
+element = 7
+pattern = 0
+color = Color(0.25, 0.72, 1, 1)
+max_charges = 7
+cast_range = 5
+damage = 3
+status_effect = ExtResource("2_wet")
+status_duration = 3
+learn_cost = 1
+upgrade_cost = 4
+bonus_damage_per_level = 2
+bonus_charges_per_level = 2
+bonus_range_per_level = 1

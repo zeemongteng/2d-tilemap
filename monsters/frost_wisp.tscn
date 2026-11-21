@@ -18,6 +18,7 @@ description = "Drifting ball of cold light. Casts Cold Snap and hurls chilling b
 glyph = "o"
 color = Color(0.5, 0.9, 1, 1)
 stats = SubResource("Resource_stats")
+elemental_type = 2
 loot_chance = 0.4
 attack_range = 4
 min_room = 3

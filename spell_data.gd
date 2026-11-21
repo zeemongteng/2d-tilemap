@@ -2,7 +2,7 @@ class_name SpellData
 extends Resource
 ## Rift Wizard-style spell resource with charges, elemental types, AoE patterns, summoning, and SP upgrades.
 
-enum Element { FIRE, LIGHTNING, ICE, ARCANE, NATURE, DARK, HOLY }
+enum Element { FIRE, LIGHTNING, ICE, ARCANE, NATURE, DARK, HOLY, WATER }
 enum Pattern { SINGLE, BLAST, BEAM, CHAIN, BLINK, NOVA, SUMMON, DASH }
 
 @export var display_name := "Spell"
@@ -190,6 +190,8 @@ func element_name() -> String:
 			return "Dark"
 		Element.HOLY:
 			return "Holy"
+		Element.WATER:
+			return "Water"
 	return "Magic"
 
 

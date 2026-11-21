@@ -16,6 +16,7 @@ description = "Hulking brute that regenerates 1 HP each turn unless burning."
 glyph = "T"
 color = Color(0.45, 0.78, 0.38, 1)
 stats = SubResource("Resource_stats")
+elemental_type = 4
 loot_chance = 0.65
 regen_per_turn = 1
 

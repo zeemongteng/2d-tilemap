@@ -17,6 +17,7 @@ description = "Swollen cave spider with dripping fangs. Its bite poisons."
 glyph = "S"
 color = Color(0.62, 0.35, 0.7, 1)
 stats = SubResource("Resource_stats")
+elemental_type = 4
 loot_chance = 0.35
 min_room = 2
 on_hit_status = ExtResource("3_poison")

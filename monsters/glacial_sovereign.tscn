@@ -20,6 +20,7 @@ glyph = "Ж"
 color = Color(0.45, 0.9, 1, 1)
 font_size = 40
 stats = SubResource("Resource_stats")
+elemental_type = 2
 loot_chance = 1.0
 attack_range = 4
 spawn_interval = 4

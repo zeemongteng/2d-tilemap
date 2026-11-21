@@ -18,6 +18,7 @@ description = "Hooded cultist muttering curses from 4 hexes away and unleashing 
 glyph = "c"
 color = Color(0.72, 0.35, 0.95, 1)
 stats = SubResource("Resource_stats")
+elemental_type = 5
 loot_chance = 0.5
 attack_range = 4
 min_room = 3

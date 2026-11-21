@@ -19,6 +19,7 @@ glyph = "M"
 color = Color(0.68, 0.35, 0.85, 1)
 font_size = 42
 stats = SubResource("Resource_stats")
+elemental_type = 4
 loot_chance = 1.0
 spawn_interval = 4
 spawn_scene = ExtResource("3_spider")

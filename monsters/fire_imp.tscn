@@ -17,6 +17,7 @@ description = "Cackling lesser demon that hurls firebolts from up to 3 hexes awa
 glyph = "i"
 color = Color(1, 0.52, 0.18, 1)
 stats = SubResource("Resource_stats")
+elemental_type = 0
 loot_chance = 0.45
 attack_range = 3
 monster_spells = Array[Resource]([ExtResource("3_firebolt")])

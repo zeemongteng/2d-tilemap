@@ -16,5 +16,6 @@ description = "Animated bones clad in rusted mail. Sturdy and relentless."
 glyph = "s"
 color = Color(0.86, 0.86, 0.8, 1)
 stats = SubResource("Resource_stats")
+elemental_type = 5
 loot_chance = 0.45
 

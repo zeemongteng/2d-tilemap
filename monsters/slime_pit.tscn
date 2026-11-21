@@ -17,6 +17,7 @@ description = "Bubbling pool of ooze that births a slime every 5 turns."
 glyph = "U"
 color = Color(0.35, 0.8, 0.4, 1)
 stats = SubResource("Resource_stats")
+elemental_type = 7
 loot_chance = 0.8
 is_spawner = true
 spawn_interval = 5

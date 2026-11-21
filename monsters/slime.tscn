@@ -18,6 +18,7 @@ glyph = "b"
 color = Color(0.35, 0.85, 0.45, 1)
 font_size = 32
 stats = SubResource("Resource_stats")
+elemental_type = 7
 loot_chance = 0.3
 min_room = 2
 death_spawn_scene = ExtResource("3_slimelet")

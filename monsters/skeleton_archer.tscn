@@ -16,6 +16,7 @@ description = "Brittle bones clutching a warped bow. Looses arrows from up to 4 
 glyph = "a"
 color = Color(0.9, 0.88, 0.7, 1)
 stats = SubResource("Resource_stats")
+elemental_type = 5
 loot_chance = 0.4
 attack_range = 4
 min_room = 2

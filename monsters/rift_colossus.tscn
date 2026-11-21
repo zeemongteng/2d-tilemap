@@ -18,6 +18,7 @@ glyph = "Ω"
 color = Color(1, 0.28, 0.35, 1)
 font_size = 44
 stats = SubResource("Resource_stats")
+elemental_type = 5
 loot_chance = 1.0
 spawn_interval = 4
 spawn_scene = ExtResource("3_imp")

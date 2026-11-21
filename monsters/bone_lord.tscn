@@ -18,6 +18,7 @@ glyph = "L"
 color = Color(0.85, 0.8, 0.95, 1)
 font_size = 40
 stats = SubResource("Resource_stats")
+elemental_type = 5
 loot_chance = 1.0
 spawn_interval = 3
 spawn_scene = ExtResource("3_skeleton")

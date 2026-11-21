@@ -293,7 +293,8 @@ func show_actor_popup(actor: Actor) -> void:
 		boss_tag = " [ELITE]"
 	elif actor.is_allies:
 		boss_tag = " [ALLY]"
-	popup_title.text = "%s %s%s" % [actor.glyph, actor.display_name.capitalize(), boss_tag]
+	var el_tag := " [%s]" % actor.element_label().to_upper() if actor.elemental_type >= 0 else ""
+	popup_title.text = "%s %s%s%s" % [actor.glyph, actor.display_name.capitalize(), el_tag, boss_tag]
 	popup_title.modulate = actor.color.lerp(Color.WHITE, 0.35)
 	popup_subtitle.modulate = Color(0.85, 0.85, 0.85)
 	if actor.is_spawner:
@@ -305,6 +306,7 @@ func show_actor_popup(actor: Actor) -> void:
 		popup_subtitle.text = "HP %d/%d  •  ATK %d  •  DEF %d%s" % [
 			actor.stats.hp, actor.stats.max_hp, actor.total_attack(), actor.total_defense(), rng_str
 		]
+	var el_hint := "\n%s" % actor.element_weakness_hint() if actor.elemental_type >= 0 else ""
 	var spell_info := ""
 	if not actor.spells.is_empty():
 		var sp_parts: Array[String] = []
@@ -314,19 +316,36 @@ func show_actor_popup(actor: Actor) -> void:
 		spell_info = "\nSpells: %s" % ", ".join(sp_parts)
 	var status_info := "\nStatuses: %s" % actor.describe_statuses() if actor.has_any_status() else ""
 	var base_desc := actor.description if not actor.description.is_empty() else "Hostile creature."
-	popup_body.text = "%s%s%s" % [base_desc, spell_info, status_info]
+	popup_body.text = "%s%s%s%s" % [base_desc, el_hint, spell_info, status_info]
 	info_popup.reset_size()
 	info_popup.visible = true
 	_update_popup_position()
 
 
-func show_world_hover_popup(actor: Actor, item: ItemData) -> void:
+func show_terrain_popup(terrain_type: int) -> void:
+	if terrain_type == HexGrid.Terrain.NONE:
+		info_popup.visible = false
+		return
+	_ui_hover_active = false
+	popup_title.text = HexGrid.terrain_name(terrain_type)
+	popup_title.modulate = HexGrid.terrain_color(terrain_type)
+	popup_subtitle.text = "Special Terrain Tile"
+	popup_subtitle.modulate = Color(0.85, 0.85, 0.85)
+	popup_body.text = HexGrid.terrain_description(terrain_type)
+	info_popup.reset_size()
+	info_popup.visible = true
+	_update_popup_position()
+
+
+func show_world_hover_popup(actor: Actor, item: ItemData, terrain_type := 0) -> void:
 	if _ui_hover_active:
 		return
 	if actor != null:
 		show_actor_popup(actor)
 	elif item != null:
 		show_item_popup(item, false)
+	elif terrain_type != HexGrid.Terrain.NONE:
+		show_terrain_popup(terrain_type)
 	else:
 		info_popup.visible = false
 

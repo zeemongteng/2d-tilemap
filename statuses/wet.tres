@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="StatusData" format=3]
+
+[ext_resource type="Script" path="res://status_data.gd" id="1_status"]
+
+[resource]
+script = ExtResource("1_status")
+id = "wet"
+display_name = "Wet"
+badge = "💧"
+color = Color(0.3, 0.72, 1, 1)
+default_duration = 3
+cancels_status_ids = Array[String](["burn"])

@@ -19,6 +19,7 @@ glyph = "⚡"
 color = Color(1, 0.92, 0.3, 1)
 font_size = 40
 stats = SubResource("Resource_stats")
+elemental_type = 1
 loot_chance = 1.0
 attack_range = 4
 spawn_interval = 5

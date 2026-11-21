@@ -9,6 +9,8 @@ const DIRECTIONS: Array[Vector2i] = [
 	Vector2i(-1, 0), Vector2i(-1, 1), Vector2i(0, 1),
 ]
 
+enum Terrain { NONE, WATER, OIL, FIRE, ICE }
+
 @export var radius := 12
 @export var hex_size := 26.0
 ## 0 = a different cave every run.
@@ -27,6 +29,10 @@ const DIRECTIONS: Array[Vector2i] = [
 
 ## cell -> true if wall, false if floor.
 var _tiles: Dictionary = {}
+## cell -> Terrain enum value (WATER, OIL, FIRE, ICE).
+var _terrain: Dictionary = {}
+## cell -> remaining turns for temporary terrain (e.g. FIRE).
+var _terrain_timers: Dictionary = {}
 var _astar := AStar2D.new()
 var _ids: Dictionary = {}
 var _cells: Array[Vector2i] = []
@@ -254,6 +260,8 @@ func generate() -> void:
 	else:
 		_rng.randomize()
 	_tiles.clear()
+	_terrain.clear()
+	_terrain_timers.clear()
 	_sanctuary_themes.clear()
 	in_sanctuary = false
 	generated_rooms.clear()
@@ -391,7 +399,129 @@ func generate_room(center: Vector2i, entry_cell: Vector2i, is_boss_room := false
 
 	_build_astar()
 	_refresh_exit_cells()
+	if not is_treasure_room and not is_shop_room:
+		_generate_room_terrain(center, entry_cell, is_boss_room)
 	queue_redraw()
+
+
+func get_terrain(cell: Vector2i) -> int:
+	return int(_terrain.get(cell, Terrain.NONE))
+
+
+func set_terrain(cell: Vector2i, terrain_type: int, duration := 0) -> void:
+	if not is_walkable(cell):
+		return
+	if terrain_type == Terrain.NONE:
+		_terrain.erase(cell)
+		_terrain_timers.erase(cell)
+	else:
+		_terrain[cell] = terrain_type
+		if duration > 0:
+			_terrain_timers[cell] = duration
+		else:
+			_terrain_timers.erase(cell)
+	queue_redraw()
+
+
+func connected_terrain(start_cell: Vector2i, terrain_type: int, max_cells := 24) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	if get_terrain(start_cell) != terrain_type:
+		return result
+	var visited := {start_cell: true}
+	var queue: Array[Vector2i] = [start_cell]
+	while not queue.is_empty() and result.size() < max_cells:
+		var cur: Vector2i = queue.pop_front()
+		result.append(cur)
+		for d in DIRECTIONS:
+			var n := cur + d
+			if not visited.has(n) and is_in_current_room(n) and get_terrain(n) == terrain_type:
+				visited[n] = true
+				queue.append(n)
+	return result
+
+
+func tick_terrain() -> void:
+	var expired: Array[Vector2i] = []
+	for c in _terrain_timers:
+		var left: int = int(_terrain_timers[c]) - 1
+		if left <= 0:
+			expired.append(c)
+		else:
+			_terrain_timers[c] = left
+	for c in expired:
+		_terrain_timers.erase(c)
+		_terrain.erase(c)
+	if not expired.is_empty():
+		queue_redraw()
+
+
+static func terrain_name(t: int) -> String:
+	match t:
+		Terrain.WATER:
+			return "Water Tile"
+		Terrain.OIL:
+			return "Oil Slick"
+		Terrain.FIRE:
+			return "Burning Ground"
+		Terrain.ICE:
+			return "Frozen Ice"
+	return ""
+
+
+static func terrain_description(t: int) -> String:
+	match t:
+		Terrain.WATER:
+			return "Applies Wet (+50% Lightning DMG, extinguishes Burn). Lightning conducts across the entire connected puddle; Ice freezes it solid!"
+		Terrain.OIL:
+			return "Highly flammable! Any Fire spell ignites the entire connected Oil slick in a chain explosion."
+		Terrain.FIRE:
+			return "Scorches non-Fire units standing on it (2 DMG + Burn). Extinguished by Water spells."
+		Terrain.ICE:
+			return "Slippery frost. Fire spells melt Ice back into Water."
+	return ""
+
+
+static func terrain_color(t: int) -> Color:
+	match t:
+		Terrain.WATER:
+			return Color(0.28, 0.72, 1.0)
+		Terrain.OIL:
+			return Color(0.68, 0.45, 0.85)
+		Terrain.FIRE:
+			return Color(1.0, 0.45, 0.15)
+		Terrain.ICE:
+			return Color(0.55, 0.92, 1.0)
+	return Color.WHITE
+
+
+func _generate_room_terrain(center: Vector2i, entry_cell: Vector2i, is_boss_room: bool) -> void:
+	var patch_count := 4 if is_boss_room else _rng.randi_range(2, 4)
+	var types: Array[int] = [Terrain.WATER, Terrain.WATER, Terrain.OIL, Terrain.ICE]
+	if is_boss_room:
+		types.append(Terrain.FIRE)
+	for _p in patch_count:
+		var t_type: int = types[_rng.randi_range(0, types.size() - 1)]
+		var seed_cell := random_floor_cell(_rng, 2, entry_cell, 3)
+		if not is_walkable(seed_cell) or distance(seed_cell, center) >= radius:
+			continue
+		var target_size := _rng.randi_range(3, 6)
+		var frontier: Array[Vector2i] = [seed_cell]
+		var placed := 0
+		while not frontier.is_empty() and placed < target_size:
+			var idx := _rng.randi_range(0, frontier.size() - 1)
+			var cur: Vector2i = frontier[idx]
+			frontier.remove_at(idx)
+			if not is_walkable(cur) or distance(cur, center) >= radius or distance(cur, entry_cell) < 2:
+				continue
+			if get_terrain(cur) != Terrain.NONE:
+				continue
+			_terrain[cur] = t_type
+			if t_type == Terrain.FIRE:
+				_terrain_timers[cur] = 8
+			placed += 1
+			for n in walkable_neighbors(cur):
+				if distance(n, center) < radius and get_terrain(n) == Terrain.NONE and not frontier.has(n):
+					frontier.append(n)
 
 
 func _carve_corridor(from: Vector2i, to: Vector2i, locked: Dictionary) -> void:
@@ -555,6 +685,34 @@ func _draw() -> void:
 		if not in_active:
 			base_col = base_col.darkened(0.28)
 		draw_colored_polygon(points, base_col)
+
+		if not _tiles[c] and _terrain.has(c):
+			var t_type: int = int(_terrain[c])
+			var cpx := cell_to_pixel(c)
+			var dim := 0.55 if not in_active else 1.0
+			match t_type:
+				Terrain.WATER:
+					draw_colored_polygon(points, Color(0.12, 0.44, 0.82, 0.56 * dim))
+					draw_arc(cpx + Vector2(0, 2), hex_size * 0.42, PI * 1.15, PI * 1.85, 8, Color(0.55, 0.88, 1.0, 0.65 * dim), 1.4)
+					draw_arc(cpx + Vector2(0, -3), hex_size * 0.28, PI * 0.15, PI * 0.85, 6, Color(0.65, 0.92, 1.0, 0.5 * dim), 1.2)
+				Terrain.OIL:
+					draw_colored_polygon(points, Color(0.07, 0.04, 0.11, 0.82 * dim))
+					draw_arc(cpx, hex_size * 0.46, 0.0, TAU, 12, Color(0.55, 0.3, 0.72, 0.45 * dim), 1.5)
+					draw_circle(cpx + Vector2(-4, -3), 3.0, Color(0.35, 0.7, 0.65, 0.32 * dim))
+				Terrain.FIRE:
+					draw_colored_polygon(points, Color(0.95, 0.28, 0.06, 0.55 * dim))
+					var flame := PackedVector2Array([
+						cpx + Vector2(0, -hex_size * 0.42),
+						cpx + Vector2(hex_size * 0.26, hex_size * 0.18),
+						cpx + Vector2(0, hex_size * 0.05),
+						cpx + Vector2(-hex_size * 0.26, hex_size * 0.18),
+					])
+					draw_colored_polygon(flame, Color(1.0, 0.78, 0.22, 0.75 * dim))
+				Terrain.ICE:
+					draw_colored_polygon(points, Color(0.45, 0.86, 0.98, 0.48 * dim))
+					var r := hex_size * 0.36
+					draw_line(cpx + Vector2(-r, -r * 0.3), cpx + Vector2(r, r * 0.3), Color(0.9, 0.98, 1.0, 0.65 * dim), 1.3)
+					draw_line(cpx + Vector2(r * 0.3, -r), cpx + Vector2(-r * 0.3, r), Color(0.9, 0.98, 1.0, 0.55 * dim), 1.3)
 
 	# Highlight exit doorway hexes on the outer rim of the current room.
 	var exit_col := exit_ready_color if room_cleared else exit_locked_color

@@ -8,6 +8,8 @@ extends Node2D
 @export var color := Color.WHITE
 @export var font_size := 28
 @export var stats: Stats
+## Elemental affinity (-1 = None, otherwise matches SpellData.Element).
+@export_enum("None:-1", "Fire:0", "Lightning:1", "Ice:2", "Arcane:3", "Nature:4", "Dark:5", "Holy:6", "Water:7") var elemental_type := -1
 ## Chance (0-1) of dropping a random item on death.
 @export var loot_chance := 0.0
 
@@ -101,6 +103,81 @@ func occupied_cells_at(center_cell: Vector2i) -> Array[Vector2i]:
 		for dr in range(maxi(-footprint_radius, -dq - footprint_radius), mini(footprint_radius, -dq + footprint_radius) + 1):
 			result.append(center_cell + Vector2i(dq, dr))
 	return result
+
+
+func element_label() -> String:
+	match elemental_type:
+		SpellData.Element.FIRE:
+			return "Fire"
+		SpellData.Element.LIGHTNING:
+			return "Lightning"
+		SpellData.Element.ICE:
+			return "Ice"
+		SpellData.Element.ARCANE:
+			return "Arcane"
+		SpellData.Element.NATURE:
+			return "Nature"
+		SpellData.Element.DARK:
+			return "Dark"
+		SpellData.Element.HOLY:
+			return "Holy"
+		SpellData.Element.WATER:
+			return "Water"
+	return ""
+
+
+## Returns 0.5x if this actor resists `attack_element`, 1.5x if weak to it, or 1.0x otherwise.
+func element_damage_multiplier(attack_element: int) -> float:
+	if elemental_type < 0:
+		return 1.0
+	if attack_element == elemental_type:
+		return 0.5
+	match elemental_type:
+		SpellData.Element.FIRE:
+			if attack_element in [SpellData.Element.WATER, SpellData.Element.ICE]:
+				return 1.5
+		SpellData.Element.WATER:
+			if attack_element in [SpellData.Element.LIGHTNING, SpellData.Element.ICE]:
+				return 1.5
+		SpellData.Element.ICE:
+			if attack_element == SpellData.Element.FIRE:
+				return 1.5
+		SpellData.Element.LIGHTNING:
+			if attack_element == SpellData.Element.NATURE:
+				return 1.5
+		SpellData.Element.NATURE:
+			if attack_element == SpellData.Element.FIRE:
+				return 1.5
+		SpellData.Element.DARK:
+			if attack_element == SpellData.Element.HOLY:
+				return 1.5
+		SpellData.Element.HOLY:
+			if attack_element == SpellData.Element.DARK:
+				return 1.5
+	return 1.0
+
+
+func element_weakness_hint() -> String:
+	if elemental_type < 0:
+		return ""
+	var weak := ""
+	match elemental_type:
+		SpellData.Element.FIRE:
+			weak = "Water / Ice"
+		SpellData.Element.WATER:
+			weak = "Lightning / Ice"
+		SpellData.Element.ICE:
+			weak = "Fire"
+		SpellData.Element.LIGHTNING:
+			weak = "Nature"
+		SpellData.Element.NATURE:
+			weak = "Fire"
+		SpellData.Element.DARK:
+			weak = "Holy"
+		SpellData.Element.HOLY:
+			weak = "Dark"
+	var weak_part := ", Weak to %s (1.5x)" % weak if not weak.is_empty() else ""
+	return "Element: %s (Resists %s 0.5x%s)" % [element_label(), element_label(), weak_part]
 
 
 func occupied_cells() -> Array[Vector2i]:

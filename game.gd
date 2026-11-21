@@ -19,6 +19,7 @@ const FEAR_STATUS: StatusData = preload("res://statuses/fear.tres")
 const FREEZE_STATUS: StatusData = preload("res://statuses/freeze.tres")
 const STUN_STATUS: StatusData = preload("res://statuses/stunned.tres")
 const HEXED_STATUS: StatusData = preload("res://statuses/hexed.tres")
+const WET_STATUS: StatusData = preload("res://statuses/wet.tres")
 const DASH_SPELL: SpellData = preload("res://spells/dash.tres")
 const MINION_SPELLS: Array[SpellData] = [
 	preload("res://spells/minion_bolt.tres"),
@@ -78,6 +79,9 @@ var _rng := RandomNumberGenerator.new()
 var _min_room_cache: Dictionary = {}
 var _elite_affixes: Array[Dictionary] = []
 var _announced_synergies: Array[String] = []
+var _shake_strength := 0.0
+var _shake_decay := 28.0
+var _shake_phase := 0.0
 
 
 func _ready() -> void:
@@ -150,8 +154,23 @@ func _on_starting_spell_chosen(spell: SpellData) -> void:
 	_refresh_hover()
 
 
-func _process(_delta: float) -> void:
+func _add_screen_shake(strength: float, decay := 28.0) -> void:
+	if strength >= _shake_strength:
+		_shake_strength = strength
+		_shake_decay = decay
+
+
+func _process(delta: float) -> void:
 	$Camera2D.position = player.position
+	if _shake_strength > 0.1:
+		_shake_phase += delta * 68.0
+		var jitter := Vector2(_rng.randf_range(-1.0, 1.0), _rng.randf_range(-1.0, 1.0)) * 0.55
+		var rumble := Vector2(sin(_shake_phase), cos(_shake_phase * 1.37)) * 0.45
+		$Camera2D.offset = (jitter + rumble) * _shake_strength
+		_shake_strength = maxf(0.0, _shake_strength - _shake_decay * delta)
+	else:
+		_shake_strength = 0.0
+		$Camera2D.offset = Vector2.ZERO
 
 
 # --- room generation & spawning -------------------------------------------
@@ -1195,7 +1214,7 @@ func _refresh_hover() -> void:
 	var cell := grid.pixel_to_cell(grid.get_local_mouse_position())
 	var hovered_monster := _monster_at(cell)
 	var world_item := _item_at(cell)
-	hud.show_world_hover_popup(hovered_monster, world_item.data if world_item != null else null)
+	hud.show_world_hover_popup(hovered_monster, world_item.data if world_item != null else null, grid.get_terrain(cell))
 	if _busy:
 		grid.set_hover(cell, [])
 		grid.clear_spell_preview()
@@ -1716,12 +1735,17 @@ func _cast_spell(spell: SpellData, target_cell: Vector2i) -> void:
 	var deals_dmg := spell.effective_damage() > 0 or spell.scales_with_attack
 	if spell.pattern == SpellData.Pattern.BLAST and deals_dmg:
 		vfx_tween = grid.play_explosion(target_cell, aoe_cells, spell.color)
+		_add_screen_shake(14.0 if spell.effective_radius() >= 2 else 8.5, 28.0)
 	elif spell.pattern == SpellData.Pattern.NOVA and deals_dmg:
 		vfx_tween = grid.play_explosion(player.cell, aoe_cells, spell.color)
+		_add_screen_shake(12.0 if spell.effective_radius() >= 2 else 8.0, 28.0)
 	elif spell.pattern == SpellData.Pattern.BLINK and spell.effective_radius() > 0 and deals_dmg:
 		vfx_tween = grid.play_explosion(target_cell, aoe_cells, spell.color)
+		_add_screen_shake(7.5, 28.0)
 	else:
 		vfx_tween = grid.play_spell_vfx(aoe_cells, spell.color, arc_points)
+		if spell.pattern == SpellData.Pattern.BEAM and deals_dmg and aoe_cells.size() >= 3:
+			_add_screen_shake(6.5, 30.0)
 
 	if spell.pattern == SpellData.Pattern.SUMMON:
 		var ally := _spawn_summon(spell, target_cell)
@@ -1817,6 +1841,7 @@ func _cast_spell(spell: SpellData, target_cell: Vector2i) -> void:
 	if not spell.is_weapon_skill:
 		_apply_cast_riders(spell, hit_monsters.size())
 		_trigger_echo_mirror(spell, target_cell)
+	_apply_terrain_reactions(spell, aoe_cells, maxi(4, spell.effective_damage() + bonus_dmg))
 
 	if player.is_dead():
 		_dead = true
@@ -1937,6 +1962,26 @@ func _spell_strike(spell: SpellData, m: Actor, overlaps: int, target_cell: Vecto
 	var tags: Array[String] = []
 	if overlaps > 1:
 		tags.append("%d hexes!" % overlaps)
+	if not spell.scales_with_attack:
+		var el_mult := m.element_damage_multiplier(int(spell.element))
+		if el_mult > 1.01:
+			mult *= el_mult
+			tags.append("WEAK!")
+		elif el_mult < 0.99:
+			mult *= el_mult
+			tags.append("RESIST")
+	if m.has_status("wet"):
+		if spell.element == SpellData.Element.LIGHTNING:
+			mult *= 1.5
+			tags.append("WET CONDUCT!")
+			m.apply_status(SHOCK_STATUS, 2 + bonus_dur)
+		elif spell.element == SpellData.Element.ICE:
+			tags.append("FLASH FREEZE!")
+			m.apply_status(FREEZE_STATUS, 1)
+		elif spell.element == SpellData.Element.FIRE:
+			mult *= 0.75
+			m.remove_status("wet")
+			tags.append("STEAM")
 	if spell.has_branch("gen_executioner") and m.stats.hp * 100 <= m.stats.max_hp * 35:
 		mult *= 2.0
 		tags.append("EXECUTE")
@@ -2079,7 +2124,7 @@ func _active_synergies() -> Dictionary:
 	for synergy_name in SYNERGY_INFO:
 		if _has_synergy(synergy_name):
 			active[synergy_name] = SYNERGY_INFO[synergy_name]
-	for el in 7:
+	for el in 8:
 		var known := player.element_mastery_count(el)
 		if known >= 2:
 			var el_name := _element_label(el)
@@ -2104,7 +2149,160 @@ func _element_label(el: int) -> String:
 			return "Dark"
 		SpellData.Element.HOLY:
 			return "Holy"
+		SpellData.Element.WATER:
+			return "Water"
 	return "Magic"
+
+
+func _apply_terrain_reactions(spell: SpellData, aoe_cells: Array[Vector2i], base_power: int) -> void:
+	if spell.scales_with_attack or aoe_cells.is_empty():
+		return
+	var el := spell.element
+	var conducted_water: Array[Vector2i] = []
+	var ignited_oil: Array[Vector2i] = []
+	var frozen_water: Array[Vector2i] = []
+
+	for c in aoe_cells:
+		if not grid.is_walkable(c) or not grid.is_in_current_room(c):
+			continue
+		var t := grid.get_terrain(c)
+		match el:
+			SpellData.Element.LIGHTNING:
+				if t == HexGrid.Terrain.WATER and not conducted_water.has(c):
+					for wc in grid.connected_terrain(c, HexGrid.Terrain.WATER, 20):
+						if not conducted_water.has(wc):
+							conducted_water.append(wc)
+			SpellData.Element.FIRE:
+				if t == HexGrid.Terrain.OIL and not ignited_oil.has(c):
+					for oc in grid.connected_terrain(c, HexGrid.Terrain.OIL, 20):
+						if not ignited_oil.has(oc):
+							ignited_oil.append(oc)
+				elif t == HexGrid.Terrain.ICE:
+					grid.set_terrain(c, HexGrid.Terrain.WATER)
+				elif t == HexGrid.Terrain.WATER:
+					grid.set_terrain(c, HexGrid.Terrain.NONE)
+				elif t == HexGrid.Terrain.NONE and spell.pattern in [SpellData.Pattern.BLAST, SpellData.Pattern.NOVA]:
+					grid.set_terrain(c, HexGrid.Terrain.FIRE, 3)
+			SpellData.Element.ICE:
+				if t == HexGrid.Terrain.WATER and not frozen_water.has(c):
+					for wc in grid.connected_terrain(c, HexGrid.Terrain.WATER, 20):
+						if not frozen_water.has(wc):
+							frozen_water.append(wc)
+			SpellData.Element.WATER:
+				if t == HexGrid.Terrain.FIRE:
+					grid.set_terrain(c, HexGrid.Terrain.WATER)
+				elif t == HexGrid.Terrain.NONE:
+					grid.set_terrain(c, HexGrid.Terrain.WATER)
+
+	if not conducted_water.is_empty():
+		var shock_dmg := maxi(3, base_power / 2)
+		grid.play_spell_vfx(conducted_water, Color(0.45, 0.92, 1.0))
+		_add_screen_shake(10.5, 28.0)
+		var shocked_count := 0
+		if not player.is_dead() and conducted_water.has(player.cell):
+			var p_dealt := _apply_damage_to_actor(player, maxi(1, shock_dmg - player.total_defense()), Color(0.45, 0.92, 1.0))
+			if p_dealt > 0:
+				player.apply_status(SHOCK_STATUS, 2)
+				shocked_count += 1
+				if player.is_dead():
+					_dead = true
+					hud.post("⚡ You are electrocuted by the charged water! Press R to start over.")
+		for m in monsters.duplicate():
+			if not is_instance_valid(m) or m.is_dead():
+				continue
+			var in_puddle := false
+			for occ in m.occupied_cells():
+				if conducted_water.has(occ):
+					in_puddle = true
+					break
+			if in_puddle:
+				var mdmg := maxi(1, int(ceil(float(shock_dmg) * m.element_damage_multiplier(SpellData.Element.LIGHTNING) * m.incoming_damage_multiplier())))
+				m.take_damage(mdmg, Color(0.45, 0.92, 1.0))
+				m.apply_status(SHOCK_STATUS, 2)
+				shocked_count += 1
+				if m.is_dead():
+					_handle_monster_death(m)
+		hud.post("⚡ WATER CONDUCT! Lightning arcs across %d wet hexes (%d unit(s) shocked for %d)!" % [conducted_water.size(), shocked_count, shock_dmg])
+
+	if not ignited_oil.is_empty():
+		for oc in ignited_oil:
+			grid.set_terrain(oc, HexGrid.Terrain.FIRE, 5)
+		grid.play_explosion(_aoe_center(ignited_oil), ignited_oil, Color(1.0, 0.42, 0.1))
+		_add_screen_shake(14.0, 26.0)
+		var oil_dmg := 6
+		if not player.is_dead() and ignited_oil.has(player.cell):
+			var p_dealt := _apply_damage_to_actor(player, maxi(1, oil_dmg - player.total_defense()), Color(1.0, 0.42, 0.1))
+			if p_dealt > 0:
+				player.apply_status(BURN_STATUS, 3)
+				if player.is_dead():
+					_dead = true
+					hud.post("🔥 The ignited Oil slick engulfs you! Press R to start over.")
+		for m in monsters.duplicate():
+			if not is_instance_valid(m) or m.is_dead():
+				continue
+			var on_oil := false
+			for occ in m.occupied_cells():
+				if ignited_oil.has(occ):
+					on_oil = true
+					break
+			if on_oil:
+				var mdmg := maxi(1, int(ceil(float(oil_dmg) * m.element_damage_multiplier(SpellData.Element.FIRE) * m.incoming_damage_multiplier())))
+				m.take_damage(mdmg, Color(1.0, 0.42, 0.1))
+				if m.elemental_type != SpellData.Element.FIRE:
+					m.apply_status(BURN_STATUS, 3)
+				if m.is_dead():
+					_handle_monster_death(m)
+		hud.post("🔥 OIL IGNITION! %d hexes erupt into roaring flames!" % ignited_oil.size())
+
+	if not frozen_water.is_empty():
+		for wc in frozen_water:
+			grid.set_terrain(wc, HexGrid.Terrain.ICE)
+		grid.play_spell_vfx(frozen_water, Color(0.55, 0.94, 1.0))
+		if not player.is_dead() and frozen_water.has(player.cell):
+			player.apply_status(FREEZE_STATUS, 1)
+		for m in monsters:
+			if is_instance_valid(m) and not m.is_dead() and m.elemental_type != SpellData.Element.ICE:
+				for occ in m.occupied_cells():
+					if frozen_water.has(occ):
+						m.apply_status(FREEZE_STATUS, 1)
+						break
+		hud.post("❄ FLASH FREEZE! %d Water hexes freeze solid into Ice!" % frozen_water.size())
+
+
+func _process_terrain_turn() -> void:
+	if grid.in_sanctuary:
+		return
+	_apply_actor_terrain_step(player)
+	if _dead:
+		return
+	for m in monsters.duplicate():
+		if is_instance_valid(m) and not m.is_dead():
+			_apply_actor_terrain_step(m)
+	grid.tick_terrain()
+
+
+func _apply_actor_terrain_step(actor: Actor) -> void:
+	var t := grid.get_terrain(actor.cell)
+	if t == HexGrid.Terrain.WATER:
+		if not actor.has_status("wet"):
+			actor.apply_status(WET_STATUS, 2)
+		else:
+			var w := actor.get_status("wet")
+			if w != null:
+				w.turns_left = maxi(w.turns_left, 2)
+	elif t == HexGrid.Terrain.FIRE:
+		if actor.elemental_type == SpellData.Element.FIRE:
+			return
+		var fire_dmg := maxi(1, int(ceil(2.0 * actor.element_damage_multiplier(SpellData.Element.FIRE))))
+		var dealt := _apply_damage_to_actor(actor, fire_dmg, Color(1.0, 0.4, 0.1))
+		if dealt > 0 and not actor.is_dead():
+			actor.apply_status(BURN_STATUS, 2)
+		if actor.is_dead():
+			if actor == player:
+				_dead = true
+				hud.post("🔥 You are burned to ash by the flames! Press R to start over.")
+			else:
+				_handle_monster_death(actor)
 
 
 func _synergy_line() -> String:
@@ -2188,6 +2386,7 @@ func _detonate_bomb(bomb: ItemData) -> void:
 	var blast_cells := grid.cells_in_radius(player.cell, bomb.blast_radius, true)
 	blast_cells.erase(player.cell)
 	grid.play_explosion(player.cell, blast_cells, bomb.color)
+	_add_screen_shake(11.0, 26.0)
 	var hit_names: Array[String] = []
 	var victims: Array[Actor] = []
 	for m in monsters.duplicate():
@@ -2430,8 +2629,11 @@ func _apply_damage_to_actor(defender: Actor, amount: int, color := Color(1, 0.3,
 				_angel_chance = maxf(0.0, _angel_chance - 18.0)
 			if player.has_relic(ItemData.RelicEffect.CURSED_PENNY):
 				_drop_coin_near(player.cell, 0)
+			if actual >= 5:
+				_add_screen_shake(minf(11.0, 4.0 + float(actual) * 0.55), 32.0)
 		if defender.phoenix_charges < phoenix_before:
 			grid.play_explosion(defender.cell, grid.cells_in_radius(defender.cell, 2, true), Color(1.0, 0.8, 0.2))
+			_add_screen_shake(16.0, 24.0)
 			hud.post("🔥 The Phoenix Feather burns away — you rise again with %d HP!" % defender.stats.hp)
 			if _has_synergy("Glass Phoenix"):
 				var rebirth_hits := _foe_blast(defender.cell, 3, 20, Color(1.0, 0.7, 0.9))
@@ -2572,6 +2774,7 @@ func _handle_monster_death(defender: Actor) -> void:
 	var note_str := " (%s)" % ", ".join(bonus_notes) if not bonus_notes.is_empty() else ""
 
 	if defender.is_boss:
+		_add_screen_shake(16.0, 22.0)
 		hud.post("★ BOSS VANQUISHED: %s falls!%s Dropped a Relic, Mana Potion, and Coins!" % [defender.display_name, note_str])
 		if _item_at(defender.cell) == null:
 			_spawn_item(_random_relic(0.7, 1), defender.cell)
@@ -2668,6 +2871,7 @@ func _split_on_death(scene: PackedScene, count: int, origin: Vector2i) -> void:
 func _death_explosion(origin: Vector2i, blast_radius: int, blast_damage: int, blast_color: Color) -> void:
 	var blast_cells := grid.cells_in_radius(origin, blast_radius, true)
 	grid.play_explosion(origin, blast_cells, blast_color)
+	_add_screen_shake(11.5, 26.0)
 	var victims: Array[Actor] = []
 	for m in monsters:
 		if m.is_dead() or m.distance_to_cell(origin) > blast_radius:
@@ -2834,6 +3038,7 @@ func _monsters_act() -> void:
 	if player.evade_turns > 0:
 		player.evade_turns = maxi(0, player.evade_turns - 1)
 		player.queue_redraw()
+	_process_terrain_turn()
 
 
 func _ally_act(ally: Actor) -> Tween:
@@ -2872,6 +3077,7 @@ func _boss_act(boss: Actor) -> Tween:
 		boss.ability2_cooldown = mini(boss.ability2_cooldown, 1)
 		boss.queue_redraw()
 		grid.play_spell_vfx(grid.cells_in_radius(boss.cell, boss.footprint_radius + 1, true), Color(1.0, 0.45, 0.1))
+		_add_screen_shake(12.5, 24.0)
 		hud.post("🔥 %s ENRAGES (Phase 2)! (+2 ATK, faster special attacks!)" % boss.display_name)
 
 	# 1. Resolve telegraphed Ground Slam or 6-Way Starburst Cataclysm if one was prepared last turn.
@@ -2916,6 +3122,10 @@ func _boss_act(boss: Actor) -> Tween:
 			grid.play_spell_vfx([], vfx_col, slam_arc)
 		var blast_center := slam_center if mode == 1 else _aoe_center(slam_cells)
 		grid.play_explosion(blast_center, slam_cells, vfx_col)
+		if mode == 1:
+			_add_screen_shake(20.0 if boss.footprint_radius > 0 else 15.5, 28.0)
+		else:
+			_add_screen_shake(13.5, 26.0)
 		var hit_any := false
 		if slam_cells.has(player.cell):
 			hit_any = true
@@ -3126,7 +3336,8 @@ func _boss_act(boss: Actor) -> Tween:
 			best_step = cand
 
 	if best_step != boss.cell:
-		grid.crush_walls_in_radius(best_step, boss.footprint_radius)
+		if grid.crush_walls_in_radius(best_step, boss.footprint_radius):
+			_add_screen_shake(6.0, 30.0)
 		return boss.move_to(best_step, STEP_TIME)
 	return null
 
@@ -3337,8 +3548,10 @@ func _execute_actor_spell(caster: Actor, spell: SpellData, target_cell: Vector2i
 
 	if spell.pattern == SpellData.Pattern.BLAST and spell.effective_damage() > 0:
 		grid.play_explosion(target_cell, aoe_cells, spell.color)
+		_add_screen_shake(9.5 if spell.effective_radius() >= 2 else 6.5, 30.0)
 	elif spell.pattern == SpellData.Pattern.NOVA and spell.effective_damage() > 0:
 		grid.play_explosion(caster.cell, aoe_cells, spell.color)
+		_add_screen_shake(8.5 if spell.effective_radius() >= 2 else 6.0, 30.0)
 	else:
 		grid.play_spell_vfx(aoe_cells, spell.color, arc_points)
 
@@ -3364,7 +3577,10 @@ func _execute_actor_spell(caster: Actor, spell: SpellData, target_cell: Vector2i
 		var dealt := 0
 		if base_dmg > 0:
 			var mitigated := maxi(1, base_dmg - v.total_defense()) if v == player else base_dmg
-			var final_dmg := maxi(1, int(ceil(float(mitigated) * v.incoming_damage_multiplier())))
+			var el_mult := 1.0 if v == player else v.element_damage_multiplier(int(spell.element))
+			if v.has_status("wet") and spell.element == SpellData.Element.LIGHTNING:
+				el_mult *= 1.5
+			var final_dmg := maxi(1, int(ceil(float(mitigated) * el_mult * v.incoming_damage_multiplier())))
 			if spell.element == SpellData.Element.FIRE or not caster.is_allies:
 				v.consume_shatter_statuses()
 			dealt = _apply_damage_to_actor(v, final_dmg, spell.color)
@@ -3391,6 +3607,7 @@ func _execute_actor_spell(caster: Actor, spell: SpellData, target_cell: Vector2i
 			hud.post("You are slain by %s's %s. Press R to start over." % [caster.display_name.to_lower(), spell.display_name])
 		elif v != player and v.is_dead():
 			_handle_monster_death(v)
+	_apply_terrain_reactions(spell, aoe_cells, maxi(3, base_dmg))
 
 
 func _ranged_monster_attack(attacker: Actor, defender: Actor) -> void:
