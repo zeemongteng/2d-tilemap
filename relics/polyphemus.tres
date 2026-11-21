@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Polyphemus"
+description = "[TBOI] Gigantic power surge: permanently grants +5 Spell Damage and +4 ATK, at the cost of -1 Max Spell Charge."
+glyph = "?"
+color = Color(0.98, 0.86, 0.72, 1)
+type = 5
+tier = 4
+spell_damage_bonus = 5
+attack_bonus = 4
+max_charges_bonus = -1
+relic_effect = 34

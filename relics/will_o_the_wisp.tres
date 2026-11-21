@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Will-o'-the-Wisp"
+description = "[Risk of Rain] Slain foes erupt in a fiery 1-hex lava explosion (5 DMG per stack + Burn), capable of igniting Oil slicks!"
+glyph = "?"
+color = Color(1.0, 0.58, 0.15, 1)
+type = 5
+tier = 3
+relic_effect = 33

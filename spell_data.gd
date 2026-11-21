@@ -28,6 +28,8 @@ enum Pattern { SINGLE, BLAST, BEAM, CHAIN, BLINK, NOVA, SUMMON, DASH }
 @export var requires_los := true
 ## HP the caster recovers for every foe struck.
 @export var heal_per_hit := 0
+## Optional HexGrid.Terrain type painted onto affected cells (0=None, 1=Water, 2=Oil, 3=Fire, 4=Ice).
+@export var leaves_terrain := 0
 
 @export_group("Progression")
 @export var learn_cost := 1

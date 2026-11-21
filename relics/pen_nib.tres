@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Pen Nib"
+description = "[Slay the Spire] Every 5th spell or melee attack you make deals DOUBLE damage (2x)!"
+glyph = "?"
+color = Color(0.95, 0.85, 0.35, 1)
+type = 5
+tier = 3
+relic_effect = 30

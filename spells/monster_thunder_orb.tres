@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="SpellData" format=3]
+
+[ext_resource type="Script" path="res://spell_data.gd" id="1_spell"]
+[ext_resource type="Resource" path="res://statuses/shock.tres" id="2_status"]
+
+[resource]
+script = ExtResource("1_spell")
+display_name = "Thunder Orb"
+description = "Unleashes a crackling ball of lightning that conducts fiercely across Water tiles."
+element = 1
+pattern = 1
+color = Color(0.45, 0.92, 1.0, 1)
+max_charges = 1
+cooldown_turns = 4
+cast_range = 5
+radius = 1
+damage = 4
+status_effect = ExtResource("2_status")
+status_duration = 2

@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Ukkoskivi (Thunderstone)"
+description = "[Noita] +1 Spell Damage. You are immune to electrified Water hazards, and stepping into Water shocks adjacent foes for 4 Lightning DMG!"
+glyph = "?"
+color = Color(0.45, 0.88, 1.0, 1)
+type = 5
+tier = 2
+spell_damage_bonus = 1
+relic_effect = 36

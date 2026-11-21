@@ -1,0 +1,28 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://actor.gd" id="1_actor"]
+[ext_resource type="Script" path="res://stats.gd" id="2_stats"]
+[ext_resource type="Resource" path="res://statuses/wet.tres" id="3_status"]
+[ext_resource type="Resource" path="res://spells/monster_tidal_splash.tres" id="4_spell"]
+
+[sub_resource type="Resource" id="Resource_stats"]
+script = ExtResource("2_stats")
+max_hp = 7
+attack = 2
+defense = 0
+
+[node name="TideCaller" type="Node2D"]
+script = ExtResource("1_actor")
+display_name = "The tide caller"
+description = "[Rift Wizard] Robed aquamancer who floods the floor with Tidal Splash, soaking everyone to amplify Lightning."
+glyph = "a"
+color = Color(0.28, 0.76, 1.0, 1)
+stats = SubResource("Resource_stats")
+elemental_type = 7
+loot_chance = 0.5
+attack_range = 4
+min_room = 2
+on_hit_status = ExtResource("3_status")
+on_hit_status_duration = 3
+death_terrain = 1
+monster_spells = Array[Resource]([ExtResource("4_spell")])

@@ -21,6 +21,7 @@ const STUN_STATUS: StatusData = preload("res://statuses/stunned.tres")
 const HEXED_STATUS: StatusData = preload("res://statuses/hexed.tres")
 const WET_STATUS: StatusData = preload("res://statuses/wet.tres")
 const DASH_SPELL: SpellData = preload("res://spells/dash.tres")
+const HOLOGRAM_SCENE: PackedScene = preload("res://monsters/hologram_decoy.tscn")
 const MINION_SPELLS: Array[SpellData] = [
 	preload("res://spells/minion_bolt.tres"),
 	preload("res://spells/minion_ember.tres"),
@@ -344,6 +345,23 @@ func _on_next_room_confirmed(edge_cell: Vector2i) -> void:
 		victim.apply_status(POISON_STATUS, 2 * candy_count + player.total_status_duration_bonus())
 		grid.play_spell_vfx([victim.cell], Color(0.55, 0.95, 0.25))
 		hud.post("Sour Candy upsets %s's stomach (Poisoned)!" % victim.display_name.to_lower())
+
+	# Hologram Bracelet (Caves of Qud): project a Hologram Decoy ally near the player!
+	var holo_count := player.count_relic(ItemData.RelicEffect.HOLOGRAM_BRACELET)
+	if holo_count > 0:
+		var spawned_holo := 0
+		for c in grid.cells_in_radius(player.cell, 2, true):
+			if spawned_holo >= holo_count:
+				break
+			if grid.is_in_current_room(c) and not _is_occupied(c):
+				var decoy := _spawn_actor(HOLOGRAM_SCENE, c)
+				decoy.is_allies = true
+				_grant_familiar_tome_spell(decoy)
+				monsters.append(decoy)
+				grid.play_spell_vfx([c], Color(0.35, 0.95, 1.0))
+				spawned_holo += 1
+		if spawned_holo > 0:
+			hud.post("💠 Hologram Bracelet projects %d Hologram Decoy(s)!" % spawned_holo)
 
 	_busy = false
 	_refresh_hud()
@@ -1677,6 +1695,8 @@ func _cast_spell(spell: SpellData, target_cell: Vector2i) -> void:
 	grid.clear_spell_preview()
 
 	var free_cast := (not spell.is_weapon_skill) and player.has_relic(ItemData.RelicEffect.ARCANE_PRISM) and _rng.randf() < 0.35
+	if not free_cast and (not spell.is_weapon_skill) and (not spell.is_innate) and player.has_relic(ItemData.RelicEffect.SNECKO_EYE) and _rng.randf() < 0.35:
+		free_cast = true
 	if not free_cast and spell.has_branch("gen_spellweaver") and _rng.randf() < 0.3:
 		free_cast = true
 	if spell.uses_cooldown():
@@ -1684,6 +1704,35 @@ func _cast_spell(spell: SpellData, target_cell: Vector2i) -> void:
 	elif not free_cast:
 		spell.charges = maxi(0, spell.charges - 1)
 	var free_note := " (free cast!)" if free_cast else ""
+
+	# Snecko Eye bonus: 20% chance to refund +1 charge to another random spell on cast.
+	if not spell.is_innate and not spell.is_weapon_skill and player.has_relic(ItemData.RelicEffect.SNECKO_EYE) and _rng.randf() < 0.20:
+		var other_spells: Array[SpellData] = []
+		for s in player.spells:
+			if s != spell and not s.uses_cooldown() and s.charges < s.effective_max_charges():
+				other_spells.append(s)
+		if not other_spells.is_empty():
+			var ref_sp := other_spells[_rng.randi_range(0, other_spells.size() - 1)]
+			ref_sp.restore_charges(1)
+			hud.post("🐍 Snecko Eye confuses your mana (+1 charge to %s)!" % ref_sp.display_name)
+
+	# Tinker With Wands (Noita): casting a spell ticks down Weapon Skill CD and restores +1 charge every 3rd cast!
+	var tinker_stacks := player.count_relic(ItemData.RelicEffect.TINKER_WANDS)
+	if tinker_stacks > 0 and not spell.is_weapon_skill:
+		var ws := player.get_weapon_skill()
+		if ws != null and ws.cooldown_remaining > 0:
+			ws.cooldown_remaining = maxi(0, ws.cooldown_remaining - tinker_stacks)
+		player.tinker_cast_counter += 1
+		if player.tinker_cast_counter >= 3:
+			player.tinker_cast_counter = 0
+			var rechargeable: Array[SpellData] = []
+			for s in player.spells:
+				if not s.uses_cooldown() and s.charges < s.effective_max_charges():
+					rechargeable.append(s)
+			if not rechargeable.is_empty():
+				var pick_sp := rechargeable[_rng.randi_range(0, rechargeable.size() - 1)]
+				pick_sp.restore_charges(tinker_stacks)
+				hud.post("✨ Tinker With Wands restores +%d charge to %s!" % [tinker_stacks, pick_sp.display_name])
 
 	var aoe_cells := _compute_spell_aoe(spell, target_cell)
 	var arc_points: Array[Vector2] = []
@@ -1796,9 +1845,16 @@ func _cast_spell(spell: SpellData, target_cell: Vector2i) -> void:
 	var bonus_dur := player.total_status_duration_bonus()
 	var bonus_burn := player.total_burn_damage_bonus()
 	var secondary_victims: Array[Actor] = []
+	var pen_nib_proc := false
+	if player.has_relic(ItemData.RelicEffect.PEN_NIB) and not hit_monsters.is_empty():
+		player.pen_nib_counter += 1
+		if player.pen_nib_counter >= 5:
+			player.pen_nib_counter = 0
+			pen_nib_proc = true
+			_add_screen_shake(10.0, 30.0)
 	for m in hit_monsters:
 		var overlaps: int = int(overlap_counts.get(m, 1))
-		hit_names.append(_spell_strike(spell, m, overlaps, target_cell, secondary_victims))
+		hit_names.append(_spell_strike(spell, m, overlaps, target_cell, secondary_victims, pen_nib_proc))
 
 	if aoe_cells.has(player.cell) and (spell.effective_damage() > 0 or spell.scales_with_attack or spell.status_effect != null):
 		if spell.effective_damage() > 0 or spell.scales_with_attack:
@@ -1944,7 +2000,7 @@ func _foe_blast(origin: Vector2i, blast_radius: int, blast_damage: int, blast_co
 
 
 ## Resolves damage, statuses, branch riders and elemental reactions of one spell hit. Returns the log fragment.
-func _spell_strike(spell: SpellData, m: Actor, overlaps: int, target_cell: Vector2i, secondary: Array[Actor]) -> String:
+func _spell_strike(spell: SpellData, m: Actor, overlaps: int, target_cell: Vector2i, secondary: Array[Actor], pen_nib_proc := false) -> String:
 	var bonus_dur := player.total_status_duration_bonus()
 	var bonus_burn := player.total_burn_damage_bonus()
 	var dmg := 0
@@ -1988,6 +2044,13 @@ func _spell_strike(spell: SpellData, m: Actor, overlaps: int, target_cell: Vecto
 	if spell.has_branch("blast_epicenter") and m.occupies_cell(target_cell):
 		mult *= 2.0
 		tags.append("EPICENTER")
+	var crowbar_stacks := player.count_relic(ItemData.RelicEffect.CROWBAR)
+	if crowbar_stacks > 0 and m.stats.hp * 100 > m.stats.max_hp * 85:
+		mult *= (1.0 + 0.5 * float(crowbar_stacks))
+		tags.append("CROWBAR!")
+	if pen_nib_proc:
+		mult *= 2.0
+		tags.append("PEN NIB 2x!")
 	var reaction := _spell_reaction(spell, m, secondary)
 	var final_dmg := int(ceil(float(dmg) * mult)) + int(reaction["bonus"])
 	for note in reaction["notes"]:
@@ -2166,6 +2229,9 @@ func _apply_terrain_reactions(spell: SpellData, aoe_cells: Array[Vector2i], base
 		if not grid.is_walkable(c) or not grid.is_in_current_room(c):
 			continue
 		var t := grid.get_terrain(c)
+		if spell.leaves_terrain > 0 and t == HexGrid.Terrain.NONE:
+			grid.set_terrain(c, spell.leaves_terrain, 5 if spell.leaves_terrain == HexGrid.Terrain.FIRE else 0)
+			t = spell.leaves_terrain
 		match el:
 			SpellData.Element.LIGHTNING:
 				if t == HexGrid.Terrain.WATER and not conducted_water.has(c):
@@ -2200,13 +2266,16 @@ func _apply_terrain_reactions(spell: SpellData, aoe_cells: Array[Vector2i], base
 		_add_screen_shake(10.5, 28.0)
 		var shocked_count := 0
 		if not player.is_dead() and conducted_water.has(player.cell):
-			var p_dealt := _apply_damage_to_actor(player, maxi(1, shock_dmg - player.total_defense()), Color(0.45, 0.92, 1.0))
-			if p_dealt > 0:
-				player.apply_status(SHOCK_STATUS, 2)
-				shocked_count += 1
-				if player.is_dead():
-					_dead = true
-					hud.post("⚡ You are electrocuted by the charged water! Press R to start over.")
+			if player.has_relic(ItemData.RelicEffect.THUNDERSTONE):
+				hud.post("⚡ Ukkoskivi shields you from the electrified water!")
+			else:
+				var p_dealt := _apply_damage_to_actor(player, maxi(1, shock_dmg - player.total_defense()), Color(0.45, 0.92, 1.0))
+				if p_dealt > 0:
+					player.apply_status(SHOCK_STATUS, 2)
+					shocked_count += 1
+					if player.is_dead():
+						_dead = true
+						hud.post("⚡ You are electrocuted by the charged water! Press R to start over.")
 		for m in monsters.duplicate():
 			if not is_instance_valid(m) or m.is_dead():
 				continue
@@ -2290,6 +2359,21 @@ func _apply_actor_terrain_step(actor: Actor) -> void:
 			var w := actor.get_status("wet")
 			if w != null:
 				w.turns_left = maxi(w.turns_left, 2)
+		if actor == player and player.has_relic(ItemData.RelicEffect.THUNDERSTONE):
+			var ts_stacks := player.count_relic(ItemData.RelicEffect.THUNDERSTONE)
+			var nearby := _foes_near(player.cell, 1)
+			if not nearby.is_empty():
+				var z_dmg := 4 * ts_stacks
+				var z_cells: Array[Vector2i] = []
+				for f in nearby:
+					z_cells.append(f.cell)
+					var dmg_out := maxi(1, int(ceil(float(z_dmg) * f.element_damage_multiplier(SpellData.Element.LIGHTNING) * f.incoming_damage_multiplier())))
+					f.take_damage(dmg_out, Color(0.45, 0.92, 1.0))
+					f.apply_status(SHOCK_STATUS, 2)
+					if f.is_dead():
+						_handle_monster_death(f)
+				grid.play_spell_vfx(z_cells, Color(0.45, 0.92, 1.0))
+				hud.post("⚡ Ukkoskivi discharges through the water, shocking %d adjacent foe(s)!" % nearby.size())
 	elif t == HexGrid.Terrain.FIRE:
 		if actor.elemental_type == SpellData.Element.FIRE:
 			return
@@ -2700,23 +2784,44 @@ func _ukulele_zap(origin: Actor, stacks: int) -> void:
 
 func _attack(attacker: Actor, defender: Actor) -> void:
 	var damage := maxi(1, attacker.total_attack() - defender.total_defense() + _rng.randi_range(-1, 1))
+	var attack_notes: Array[String] = []
 	if attacker == player and defender.has_any_status():
 		damage += player.total_afflicted_damage_bonus()
-	damage = int(ceil(float(damage) * defender.incoming_damage_multiplier()))
+	var atk_mult := defender.incoming_damage_multiplier()
+	if attacker == player:
+		var crowbar_stacks := player.count_relic(ItemData.RelicEffect.CROWBAR)
+		if crowbar_stacks > 0 and defender.stats.hp * 100 > defender.stats.max_hp * 85:
+			atk_mult *= (1.0 + 0.5 * float(crowbar_stacks))
+			attack_notes.append("CROWBAR!")
+		if player.has_relic(ItemData.RelicEffect.PEN_NIB):
+			player.pen_nib_counter += 1
+			if player.pen_nib_counter >= 5:
+				player.pen_nib_counter = 0
+				atk_mult *= 2.0
+				attack_notes.append("PEN NIB 2x!")
+				_add_screen_shake(9.0, 30.0)
+	damage = int(ceil(float(damage) * atk_mult))
 	var shattered := defender.consume_shatter_statuses()
+	if shattered:
+		attack_notes.append("SHATTER!")
 	var dealt := _apply_damage_to_actor(defender, damage)
 	if defender == player and dealt == 0:
 		return
-	var shatter_note := " (SHATTER!)" if shattered else ""
+	var note_tag := " (%s)" % ", ".join(attack_notes) if not attack_notes.is_empty() else ""
 	hud.post("%s %s %s for %d%s." % [
 		attacker.display_name,
 		"hit" if attacker == player else "hits",
 		defender.display_name.to_lower(),
 		dealt,
-		shatter_note,
+		note_tag,
 	])
 	if not defender.is_dead():
 		_apply_on_hit_statuses(attacker, defender)
+		if attacker == player and player.has_relic(ItemData.RelicEffect.SNECKO_EYE) and _rng.randf() < 0.25:
+			var chaos_pool: Array[StatusData] = [BURN_STATUS, POISON_STATUS, SHOCK_STATUS, HEXED_STATUS, FEAR_STATUS]
+			var chaos_st := chaos_pool[_rng.randi_range(0, chaos_pool.size() - 1)]
+			defender.apply_status(chaos_st, 2 + player.total_status_duration_bonus())
+			hud.post("🐍 Snecko Eye inflicts %s on %s!" % [chaos_st.display_name, defender.display_name.to_lower()])
 		if defender == player and not attacker.is_dead():
 			var thorn_stacks := player.count_relic(ItemData.RelicEffect.THORN_RING)
 			if thorn_stacks > 0:
@@ -2807,8 +2912,13 @@ func _handle_monster_death(defender: Actor) -> void:
 	var death_blast_radius := defender.death_blast_radius
 	var split_scene := defender.death_spawn_scene
 	var split_count := defender.death_spawn_count
+	var d_terrain := defender.death_terrain
 	defender.queue_free()
 
+	if d_terrain > 0:
+		for tc in grid.cells_in_radius(death_cell, 1, true):
+			if grid.is_in_current_room(tc) and grid.get_terrain(tc) == HexGrid.Terrain.NONE:
+				grid.set_terrain(tc, d_terrain, 5 if d_terrain == HexGrid.Terrain.FIRE else 0)
 	_trigger_kill_relics(death_cell)
 	if split_scene != null:
 		_split_on_death(split_scene, split_count, death_cell)
@@ -2832,6 +2942,22 @@ func _trigger_kill_relics(death_cell: Vector2i) -> void:
 		if ignited > 0:
 			grid.play_explosion(death_cell, grid.cells_in_radius(death_cell, gas_radius, true), Color(1.0, 0.55, 0.15))
 			hud.post("Gasoline ignites! %d nearby foe(s) catch fire." % ignited)
+
+	var wisp_stacks := player.count_relic(ItemData.RelicEffect.WILL_O_THE_WISP)
+	if wisp_stacks > 0:
+		var wisp_cells := grid.cells_in_radius(death_cell, 1, true)
+		var wisp_dmg := 5 * wisp_stacks + player.total_spell_damage_bonus() / 2
+		var hit_wisp := _foe_blast(death_cell, 1, wisp_dmg, Color(1.0, 0.55, 0.12))
+		_add_screen_shake(9.5, 28.0)
+		for f in _foes_near(death_cell, 1):
+			f.apply_status(BURN_STATUS, 2 + player.total_status_duration_bonus(), player.total_burn_damage_bonus())
+		# Trigger Oil ignition if Will-o'-the-Wisp explodes on Oil!
+		var dummy_fire := SpellData.new()
+		dummy_fire.element = SpellData.Element.FIRE
+		dummy_fire.pattern = SpellData.Pattern.BLAST
+		_apply_terrain_reactions(dummy_fire, wisp_cells, wisp_dmg)
+		if hit_wisp > 0:
+			hud.post("🔥 Will-o'-the-Wisp detonates, blasting %d foe(s) for %d!" % [hit_wisp, wisp_dmg])
 
 	var bandolier_stacks := player.count_relic(ItemData.RelicEffect.BANDOLIER)
 	if bandolier_stacks > 0 and _rng.randf() < 0.35 * bandolier_stacks:

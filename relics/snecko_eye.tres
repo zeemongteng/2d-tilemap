@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Snecko Eye"
+description = "[Slay the Spire] +2 Max Spell Charges & +1 Spell DMG. Non-innate spells have 35% chance to cost 0 charges (or 20% to refund another spell), and melee hits inflict random statuses!"
+glyph = "?"
+color = Color(0.55, 0.92, 0.42, 1)
+type = 5
+tier = 3
+max_charges_bonus = 2
+spell_damage_bonus = 1
+relic_effect = 31

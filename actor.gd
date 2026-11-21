@@ -36,6 +36,8 @@ extends Node2D
 ## On death, splits into this many copies of death_spawn_scene.
 @export var death_spawn_scene: PackedScene
 @export var death_spawn_count := 2
+## Optional HexGrid.Terrain type left on the floor on death (0=None, 1=Water, 2=Oil, 3=Fire, 4=Ice).
+@export var death_terrain := 0
 ## Spells this creature casts on its own turn (cooldown spells recommended).
 @export var monster_spells: Array[Resource] = []
 
@@ -61,6 +63,8 @@ var was_charmed_enemy := false
 var holy_mantle_shield := false
 var evade_turns := 0
 var phoenix_charges := 0
+var pen_nib_counter := 0
+var tinker_cast_counter := 0
 var is_elite := false
 var elite_color := Color.WHITE
 

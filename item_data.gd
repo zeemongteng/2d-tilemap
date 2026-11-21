@@ -52,6 +52,14 @@ enum RelicEffect {
 	THORN_RING,
 	BLOOD_VIAL,
 	POCKET_SAND,
+	PEN_NIB,
+	SNECKO_EYE,
+	CROWBAR,
+	WILL_O_THE_WISP,
+	POLYPHEMUS,
+	TINKER_WANDS,
+	THUNDERSTONE,
+	HOLOGRAM_BRACELET,
 }
 
 @export var display_name := "Item"

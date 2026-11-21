@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Tinker With Wands"
+description = "[Noita] +2 Spell Damage. Casting any spell ticks down your Weapon Skill cooldown by 1, and every 3rd cast restores +1 charge to a random spell!"
+glyph = "?"
+color = Color(0.45, 0.95, 0.9, 1)
+type = 5
+tier = 4
+spell_damage_bonus = 2
+relic_effect = 35

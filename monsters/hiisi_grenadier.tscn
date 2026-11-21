@@ -1,0 +1,28 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://actor.gd" id="1_actor"]
+[ext_resource type="Script" path="res://stats.gd" id="2_stats"]
+[ext_resource type="Resource" path="res://statuses/burn.tres" id="3_status"]
+[ext_resource type="Resource" path="res://spells/monster_oil_bomb.tres" id="4_spell"]
+[ext_resource type="Resource" path="res://spells/monster_firebolt.tres" id="5_spell"]
+
+[sub_resource type="Resource" id="Resource_stats"]
+script = ExtResource("2_stats")
+max_hp = 8
+attack = 3
+defense = 1
+
+[node name="HiisiGrenadier" type="Node2D"]
+script = ExtResource("1_actor")
+display_name = "The Hiisi grenadier"
+description = "[Noita] Goggled subterranean sapper. Lobs Oil Bombs and fiery Firebolts to chain-ignite the arena!"
+glyph = "H"
+color = Color(1.0, 0.45, 0.22, 1)
+stats = SubResource("Resource_stats")
+elemental_type = 0
+loot_chance = 0.55
+attack_range = 4
+min_room = 2
+on_hit_status = ExtResource("3_status")
+on_hit_status_duration = 2
+monster_spells = Array[Resource]([ExtResource("4_spell"), ExtResource("5_spell")])

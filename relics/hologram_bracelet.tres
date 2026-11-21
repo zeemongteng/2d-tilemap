@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://item_data.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+display_name = "Hologram Bracelet"
+description = "[Caves of Qud] Entering a new combat room projects a Hologram Decoy ally near you to draw enemy fire and trigger minion relics!"
+glyph = "?"
+color = Color(0.35, 0.95, 1.0, 1)
+type = 5
+tier = 3
+relic_effect = 37

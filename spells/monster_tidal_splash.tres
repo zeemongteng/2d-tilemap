@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="SpellData" format=3]
+
+[ext_resource type="Script" path="res://spell_data.gd" id="1_spell"]
+[ext_resource type="Resource" path="res://statuses/wet.tres" id="2_status"]
+
+[resource]
+script = ExtResource("1_spell")
+display_name = "Tidal Splash"
+description = "Crashes a wave of water across 7 hexes, drenching tiles into Water and applying Wet."
+element = 7
+pattern = 1
+color = Color(0.25, 0.72, 1.0, 1)
+max_charges = 1
+cooldown_turns = 4
+cast_range = 4
+radius = 1
+damage = 2
+status_effect = ExtResource("2_status")
+status_duration = 3
+leaves_terrain = 1

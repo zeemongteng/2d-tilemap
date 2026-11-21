@@ -403,6 +403,9 @@ func refresh(
 		status_parts.append("Evasion (Dodging)")
 	if player.holy_mantle_shield:
 		status_parts.append("Holy Mantle Shield")
+	if player.has_relic(ItemData.RelicEffect.PEN_NIB):
+		var nib_str := "Pen Nib READY (2x DMG!)" if player.pen_nib_counter >= 4 else "Pen Nib (%d/5)" % player.pen_nib_counter
+		status_parts.append(nib_str)
 	if player.has_any_status():
 		status_parts.append(player.describe_statuses())
 	var status_line := "\nStatus: " + ", ".join(status_parts) if not status_parts.is_empty() else ""
